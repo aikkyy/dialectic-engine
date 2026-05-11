@@ -1,585 +1,419 @@
 // opinions.ts — structured dataset for the sentence builder
 
-export interface OpinionRow {
-  subject: string
+export interface OpinionStatement {
   modalVerb: string
   verb: string
   complement: string
 }
 
-export interface OpinionFlip {
+export interface OpinionRow extends OpinionStatement {
   subject: string
-  modalVerb: string
-  verb: string
-  complement: string
 }
 
-export interface OpinionPair extends OpinionRow {
-  flip: OpinionFlip
+export interface OpinionPair {
+  left: OpinionStatement
+  right: OpinionStatement
 }
 
-// Individual arrays for control over possibilities
-export const SUBJECTS = [
-  'gender',
-  'children',
-  'schools',
-  'governments',
-  'gender transition',
-  'gender affirming care',
-  'gender roles',
-  'media',
-  'language',
-  'pronouns',
-  'misgendering',
-  'gender debates',
-  'science',
-  'identity',
-  'sports',
-]
+export interface OpinionGroup {
+  subject: string
+  pairs: OpinionPair[]
+}
 
-export const MODAL_VERBS = [
-  'should',
-  'should not',
-  'should be',
-  'should not be',
-]
-
-export const VERBS = [
-  'be',
-  'exist',
-  'teach',
-  'promote',
-  'recognise',
-  'restricted',
-  'accessible',
-  'preserved',
-  'destroyed',
-  'represent',
-  'normalise',
-  'adapt',
-  'evolve',
-  'chosen',
-  'penalised',
-  'be',
-  'legally punishable',
-  'define',
-  'override',
-  'separated',
-  'integrated',
-  'irrelevant',
-  'determine',
-]
-
-export const COMPLEMENTS = [
-  'defined strictly by biology',
-  'self-defined',
-  'exist as a concept',
-  'abolished',
-  'fluid and ever-changing',
-  'limited to two options',
-  'questioned publicly',
-  'challenged',
-  'exposed to gender theory',
-  'free to explore gender identity',
-  'gender diversity',
-  'gender inclusion',
-  'biological sex only',
-  'all gender identities',
-  'removed from legal documents',
-  'mandatory on official records',
-  'to adults only',
-  'to anyone who needs it',
-  'publicly funded',
-  'in society',
-  'completely',
-  'nontraditional genders',
-  'all gender identities',
-  'to gender identity',
-  'to reflect gender diversity',
-  'biologically determined',
-  'chosen freely by individuals',
-  'penalised',
-  'legally punishable',
-  'restricted online',
-  'completely uncensored',
-  'gender',
-  'science',
-  'separated by biological sex',
-  'integrated regardless of gender',
-  'irrelevant in sports',
-  'competition categories',
-]
-
-// Valid combinations defining the relationship between all fields.
-// Each row stores the opposing perspective so the selection can be flipped.
-export const COMBINATIONS: OpinionPair[] = [
+// Grouped by subject so related statements live together.
+// Each pair stores opposite perspectives in one place.
+export const OPINION_GROUPS: OpinionGroup[] = [
   {
     subject: 'gender',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'defined strictly by biology',
-    flip: {
-      subject: 'gender',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'self-defined',
-    },
-  },
-  {
-    subject: 'gender',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'self-defined',
-    flip: {
-      subject: 'gender',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'defined strictly by biology',
-    },
-  },
-  {
-    subject: 'gender',
-    modalVerb: 'should not',
-    verb: 'exist',
-    complement: 'exist as a concept',
-    flip: {
-      subject: 'gender',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'abolished',
-    },
-  },
-  {
-    subject: 'gender',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'abolished',
-    flip: {
-      subject: 'gender',
-      modalVerb: 'should not',
-      verb: 'exist',
-      complement: 'exist as a concept',
-    },
-  },
-  {
-    subject: 'gender',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'fluid and ever-changing',
-    flip: {
-      subject: 'gender',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'limited to two options',
-    },
-  },
-  {
-    subject: 'gender',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'limited to two options',
-    flip: {
-      subject: 'gender',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'fluid and ever-changing',
-    },
-  },
-  {
-    subject: 'gender',
-    modalVerb: 'should not',
-    verb: 'be',
-    complement: 'questioned publicly',
-    flip: {
-      subject: 'gender',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'challenged',
-    },
-  },
-  {
-    subject: 'gender',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'challenged',
-    flip: {
-      subject: 'gender',
-      modalVerb: 'should not',
-      verb: 'be',
-      complement: 'questioned publicly',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'defined strictly by biology',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'self-defined',
+        },
+      },
+      {
+        left: {
+          modalVerb: 'should not',
+          verb: 'exist',
+          complement: 'exist as a concept',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'abolished',
+        },
+      },
+      {
+        left: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'fluid and ever-changing',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'limited to two options',
+        },
+      },
+      {
+        left: {
+          modalVerb: 'should not',
+          verb: 'be',
+          complement: 'questioned publicly',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'challenged',
+        },
+      },
+      {
+        left: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'removed from legal documents',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'mandatory on official records',
+        },
+      },
+      {
+        left: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'irrelevant in sports',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'determine',
+          complement: 'competition categories',
+        },
+      },
+    ],
   },
   {
     subject: 'children',
-    modalVerb: 'should not',
-    verb: 'be',
-    complement: 'exposed to gender theory',
-    flip: {
-      subject: 'children',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'free to explore gender identity',
-    },
-  },
-  {
-    subject: 'children',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'free to explore gender identity',
-    flip: {
-      subject: 'children',
-      modalVerb: 'should not',
-      verb: 'be',
-      complement: 'exposed to gender theory',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should not',
+          verb: 'be',
+          complement: 'exposed to gender theory',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'free to explore gender identity',
+        },
+      },
+    ],
   },
   {
     subject: 'schools',
-    modalVerb: 'should not',
-    verb: 'teach',
-    complement: 'gender diversity',
-    flip: {
-      subject: 'schools',
-      modalVerb: 'should',
-      verb: 'promote',
-      complement: 'gender inclusion',
-    },
-  },
-  {
-    subject: 'schools',
-    modalVerb: 'should',
-    verb: 'promote',
-    complement: 'gender inclusion',
-    flip: {
-      subject: 'schools',
-      modalVerb: 'should not',
-      verb: 'teach',
-      complement: 'gender diversity',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should not',
+          verb: 'teach',
+          complement: 'gender diversity',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'promote',
+          complement: 'gender inclusion',
+        },
+      },
+    ],
   },
   {
     subject: 'governments',
-    modalVerb: 'should',
-    verb: 'recognise',
-    complement: 'biological sex only',
-    flip: {
-      subject: 'governments',
-      modalVerb: 'should',
-      verb: 'recognise',
-      complement: 'all gender identities',
-    },
-  },
-  {
-    subject: 'governments',
-    modalVerb: 'should',
-    verb: 'recognise',
-    complement: 'all gender identities',
-    flip: {
-      subject: 'governments',
-      modalVerb: 'should',
-      verb: 'recognise',
-      complement: 'biological sex only',
-    },
-  },
-  {
-    subject: 'gender',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'removed from legal documents',
-    flip: {
-      subject: 'gender',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'mandatory on official records',
-    },
-  },
-  {
-    subject: 'gender',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'mandatory on official records',
-    flip: {
-      subject: 'gender',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'removed from legal documents',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should',
+          verb: 'recognise',
+          complement: 'biological sex only',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'recognise',
+          complement: 'all gender identities',
+        },
+      },
+    ],
   },
   {
     subject: 'gender transition',
-    modalVerb: 'should be',
-    verb: 'restricted',
-    complement: 'to adults only',
-    flip: {
-      subject: 'gender transition',
-      modalVerb: 'should be',
-      verb: 'accessible',
-      complement: 'to anyone who needs it',
-    },
-  },
-  {
-    subject: 'gender transition',
-    modalVerb: 'should be',
-    verb: 'accessible',
-    complement: 'to anyone who needs it',
-    flip: {
-      subject: 'gender transition',
-      modalVerb: 'should be',
-      verb: 'restricted',
-      complement: 'to adults only',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should be',
+          verb: 'restricted',
+          complement: 'to adults only',
+        },
+        right: {
+          modalVerb: 'should be',
+          verb: 'accessible',
+          complement: 'to anyone who needs it',
+        },
+      },
+    ],
   },
   {
     subject: 'gender affirming care',
-    modalVerb: 'should not',
-    verb: 'be',
-    complement: 'publicly funded',
-    flip: {
-      subject: 'gender affirming care',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'publicly funded',
-    },
-  },
-  {
-    subject: 'gender affirming care',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'publicly funded',
-    flip: {
-      subject: 'gender affirming care',
-      modalVerb: 'should not',
-      verb: 'be',
-      complement: 'publicly funded',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should not',
+          verb: 'be',
+          complement: 'publicly funded',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'publicly funded',
+        },
+      },
+    ],
   },
   {
     subject: 'gender roles',
-    modalVerb: 'should be',
-    verb: 'preserved',
-    complement: 'in society',
-    flip: {
-      subject: 'gender roles',
-      modalVerb: 'should be',
-      verb: 'destroyed',
-      complement: 'completely',
-    },
-  },
-  {
-    subject: 'gender roles',
-    modalVerb: 'should be',
-    verb: 'destroyed',
-    complement: 'completely',
-    flip: {
-      subject: 'gender roles',
-      modalVerb: 'should be',
-      verb: 'preserved',
-      complement: 'in society',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should be',
+          verb: 'preserved',
+          complement: 'in society',
+        },
+        right: {
+          modalVerb: 'should be',
+          verb: 'destroyed',
+          complement: 'completely',
+        },
+      },
+    ],
   },
   {
     subject: 'media',
-    modalVerb: 'should not',
-    verb: 'represent',
-    complement: 'nontraditional genders',
-    flip: {
-      subject: 'media',
-      modalVerb: 'should',
-      verb: 'normalise',
-      complement: 'all gender identities',
-    },
-  },
-  {
-    subject: 'media',
-    modalVerb: 'should',
-    verb: 'normalise',
-    complement: 'all gender identities',
-    flip: {
-      subject: 'media',
-      modalVerb: 'should not',
-      verb: 'represent',
-      complement: 'nontraditional genders',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should not',
+          verb: 'represent',
+          complement: 'nontraditional genders',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'normalise',
+          complement: 'all gender identities',
+        },
+      },
+    ],
   },
   {
     subject: 'language',
-    modalVerb: 'should not',
-    verb: 'adapt',
-    complement: 'to gender identity',
-    flip: {
-      subject: 'language',
-      modalVerb: 'should',
-      verb: 'evolve',
-      complement: 'to reflect gender diversity',
-    },
-  },
-  {
-    subject: 'language',
-    modalVerb: 'should',
-    verb: 'evolve',
-    complement: 'to reflect gender diversity',
-    flip: {
-      subject: 'language',
-      modalVerb: 'should not',
-      verb: 'adapt',
-      complement: 'to gender identity',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should not',
+          verb: 'adapt',
+          complement: 'to gender identity',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'evolve',
+          complement: 'to reflect gender diversity',
+        },
+      },
+    ],
   },
   {
     subject: 'pronouns',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'biologically determined',
-    flip: {
-      subject: 'pronouns',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'chosen freely by individuals',
-    },
-  },
-  {
-    subject: 'pronouns',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'chosen freely by individuals',
-    flip: {
-      subject: 'pronouns',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'biologically determined',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'biologically determined',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'chosen freely by individuals',
+        },
+      },
+    ],
   },
   {
     subject: 'misgendering',
-    modalVerb: 'should not',
-    verb: 'be',
-    complement: 'penalised',
-    flip: {
-      subject: 'misgendering',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'legally punishable',
-    },
-  },
-  {
-    subject: 'misgendering',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'legally punishable',
-    flip: {
-      subject: 'misgendering',
-      modalVerb: 'should not',
-      verb: 'be',
-      complement: 'penalised',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should not',
+          verb: 'be',
+          complement: 'penalised',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'legally punishable',
+        },
+      },
+    ],
   },
   {
     subject: 'gender debates',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'restricted online',
-    flip: {
-      subject: 'gender debates',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'completely uncensored',
-    },
-  },
-  {
-    subject: 'gender debates',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'completely uncensored',
-    flip: {
-      subject: 'gender debates',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'restricted online',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'restricted online',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'completely uncensored',
+        },
+      },
+    ],
   },
   {
     subject: 'science',
-    modalVerb: 'should',
-    verb: 'define',
-    complement: 'gender',
-    flip: {
-      subject: 'identity',
-      modalVerb: 'should',
-      verb: 'override',
-      complement: 'science',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should',
+          verb: 'define',
+          complement: 'gender',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'override',
+          complement: 'science',
+        },
+      },
+    ],
   },
   {
     subject: 'identity',
-    modalVerb: 'should',
-    verb: 'override',
-    complement: 'science',
-    flip: {
-      subject: 'science',
-      modalVerb: 'should',
-      verb: 'define',
-      complement: 'gender',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should',
+          verb: 'override',
+          complement: 'science',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'define',
+          complement: 'gender',
+        },
+      },
+    ],
   },
   {
     subject: 'sports',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'separated by biological sex',
-    flip: {
-      subject: 'sports',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'integrated regardless of gender',
-    },
-  },
-  {
-    subject: 'sports',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'integrated regardless of gender',
-    flip: {
-      subject: 'sports',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'separated by biological sex',
-    },
-  },
-  {
-    subject: 'gender',
-    modalVerb: 'should',
-    verb: 'be',
-    complement: 'irrelevant in sports',
-    flip: {
-      subject: 'gender',
-      modalVerb: 'should',
-      verb: 'determine',
-      complement: 'competition categories',
-    },
-  },
-  {
-    subject: 'gender',
-    modalVerb: 'should',
-    verb: 'determine',
-    complement: 'competition categories',
-    flip: {
-      subject: 'gender',
-      modalVerb: 'should',
-      verb: 'be',
-      complement: 'irrelevant in sports',
-    },
+    pairs: [
+      {
+        left: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'separated by biological sex',
+        },
+        right: {
+          modalVerb: 'should',
+          verb: 'be',
+          complement: 'integrated regardless of gender',
+        },
+      },
+    ],
   },
 ]
 
+function createKey(row: OpinionRow): string {
+  return [row.subject, row.modalVerb, row.verb, row.complement].join(' | ')
+}
+
+function toRow(subject: string, statement: OpinionStatement): OpinionRow {
+  return { subject, ...statement }
+}
+
+export const OPINION_ROWS: OpinionRow[] = OPINION_GROUPS.flatMap((group) =>
+  group.pairs.flatMap((pair) => [
+    toRow(group.subject, pair.left),
+    toRow(group.subject, pair.right),
+  ]),
+)
+
+const flipByKey = new Map<string, OpinionRow>()
+const tokenIndex = new Map<string, OpinionRow[]>()
+const verbsBySubject = new Map<string, Set<string>>()
+const verbsBySubjectModal = new Map<string, Set<string>>()
+const complementsByTriple = new Map<string, Set<string>>()
+
+for (const group of OPINION_GROUPS) {
+  for (const pair of group.pairs) {
+    const leftRow = toRow(group.subject, pair.left)
+    const rightRow = toRow(group.subject, pair.right)
+
+    const leftKey = createKey(leftRow)
+    const rightKey = createKey(rightRow)
+
+    flipByKey.set(leftKey, rightRow)
+    flipByKey.set(rightKey, leftRow)
+
+    for (const row of [leftRow, rightRow]) {
+      for (const token of [row.subject, row.modalVerb, row.verb, row.complement]) {
+        const existing = tokenIndex.get(token)
+        if (existing) {
+          if (!existing.some((item) => createKey(item) === createKey(row))) {
+            existing.push(row)
+          }
+        } else {
+          tokenIndex.set(token, [row])
+        }
+      }
+
+      const verbSet = verbsBySubject.get(row.subject) ?? new Set<string>()
+      verbSet.add(row.verb)
+      verbsBySubject.set(row.subject, verbSet)
+
+      const subjectModalKey = [row.subject, row.modalVerb].join(' | ')
+      const subjectModalVerbSet =
+        verbsBySubjectModal.get(subjectModalKey) ?? new Set<string>()
+      subjectModalVerbSet.add(row.verb)
+      verbsBySubjectModal.set(subjectModalKey, subjectModalVerbSet)
+
+      const tripleKey = [row.subject, row.modalVerb, row.verb].join(' | ')
+      const complementSet = complementsByTriple.get(tripleKey) ?? new Set<string>()
+      complementSet.add(row.complement)
+      complementsByTriple.set(tripleKey, complementSet)
+    }
+  }
+}
+
+export const SUBJECTS = [...new Set(OPINION_ROWS.map((row) => row.subject))]
+export const MODAL_VERBS = [...new Set(OPINION_ROWS.map((row) => row.modalVerb))]
+export const VERBS = [...new Set(OPINION_ROWS.map((row) => row.verb))]
+export const COMPLEMENTS = [...new Set(OPINION_ROWS.map((row) => row.complement))]
+
 /** Given a subject + modal verb, what verbs are valid? */
 export function getVerbs(subject: string, modal: string): string[] {
-  return [
-    ...new Set(
-      COMBINATIONS.filter(
-        (o) => o.subject === subject && o.modalVerb === modal,
-      ).map((o) => o.verb),
-    ),
-  ]
+  const key = [subject, modal].join(' | ')
+  const verbs = verbsBySubjectModal.get(key)
+  if (!verbs) return []
+
+  return [...verbs]
 }
 
 /** Given subject + modal + verb, what complements are valid? */
@@ -588,33 +422,29 @@ export function getComplements(
   modal: string,
   verb: string,
 ): string[] {
-  return COMBINATIONS.filter(
-    (o) => o.subject === subject && o.modalVerb === modal && o.verb === verb,
-  ).map((o) => o.complement)
+  const key = [subject, modal, verb].join(' | ')
+  return [...(complementsByTriple.get(key) ?? new Set<string>())]
 }
 
 /** Try to find the best matching row for a clicked word from the ticker */
 export function findRowByWord(word: string): Partial<OpinionRow> | null {
-  const lower = word.toLowerCase()
-  const match = COMBINATIONS.find(
-    (o) =>
-      o.subject === lower || o.complement.includes(lower) || o.verb === lower,
-  )
-  if (!match) return null
-  return match
+  const lower = word.toLowerCase().trim()
+  const match =
+    tokenIndex.get(lower)?.[0] ??
+    OPINION_ROWS.find(
+      (row) =>
+        row.subject === lower ||
+        row.complement.includes(lower) ||
+        row.verb === lower ||
+        row.modalVerb === lower,
+    )
+
+  return match ?? null
 }
 
-export function flipOpinion(opinion: OpinionRow): OpinionFlip | null {
-  const match = COMBINATIONS.find(
-    (row) =>
-      row.subject === opinion.subject &&
-      row.modalVerb === opinion.modalVerb &&
-      row.verb === opinion.verb &&
-      row.complement === opinion.complement,
-  )
-
-  return match?.flip ?? null
+export function flipOpinion(opinion: OpinionRow): OpinionRow | null {
+  return flipByKey.get(createKey(opinion)) ?? null
 }
 
 // Backward compatibility alias
-export const OPINIONS = COMBINATIONS
+export const OPINIONS = OPINION_ROWS

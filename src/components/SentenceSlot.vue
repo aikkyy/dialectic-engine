@@ -141,6 +141,11 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 </template>
 
 <style scoped>
+.slot-root {
+  position: relative;
+  display: inline-flex;
+}
+
 .slot-trigger {
   display: inline-flex;
   align-items: center;
@@ -158,6 +163,9 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   font-size: inherit;
   line-height: inherit;
   color: inherit;
+  min-height: 1.5em;
+  display: inline-flex;
+  align-items: center;
 }
 
 .slot-trigger:hover {

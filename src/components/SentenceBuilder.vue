@@ -8,6 +8,14 @@ import {
   type OpinionRow,
 } from '../data/opinions'
 
+interface Props {
+  fontSize?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  fontSize: 'clamp(16px, 2.1vw, 18px)',
+})
+
 // ── All static option lists (no cascade filtering) ───────────
 const subjectOptions = SUBJECTS
 const modalOptions = MODAL_VERBS
@@ -76,118 +84,203 @@ defineExpose({ injectSubject, injectComplement })
 </script>
 
 <template>
-  <div class="sentence-builder-root">
-    <div class="sentence-line" role="group" aria-label="Sentence builder">
-      <span class="sentence-prefix">I believe that</span>
+  <div class="sentence-builder-root" :style="{ '--sentence-font-size': props.fontSize }">
+    <!-- LEFT SIDE: Builder -->
+    <div class="builder-side">
+      <div class="sentence-line" role="group" aria-label="Sentence builder">
+        <span class="sentence-prefix">I believe that</span>
 
-      <SentenceSlot
-        v-model="subject"
-        :options="subjectOptions"
-        placeholder="subject"
-        slot-type="subject"
-      />
-      <SentenceSlot
-        v-model="modalVerb"
-        :options="modalOptions"
-        placeholder="should…"
-        slot-type="modal"
-      />
-      <SentenceSlot
-        v-model="verb"
-        :options="verbOptions"
-        placeholder="verb"
-        slot-type="verb"
-      />
-      <SentenceSlot
-        v-model="complement"
-        :options="complementOptions"
-        placeholder="…"
-        slot-type="complement"
-      />
+        <div class="slots-container">
+          <SentenceSlot
+            v-model="subject"
+            :options="subjectOptions"
+            placeholder="subject"
+            slot-type="subject"
+          />
+          <SentenceSlot
+            v-model="modalVerb"
+            :options="modalOptions"
+            placeholder="should…"
+            slot-type="modal"
+          />
+          <SentenceSlot
+            v-model="verb"
+            :options="verbOptions"
+            placeholder="verb"
+            slot-type="verb"
+          />
+          <SentenceSlot
+            v-model="complement"
+            :options="complementOptions"
+            placeholder="…"
+            slot-type="complement"
+          />
 
-      <span class="sentence-period" :class="{ 'is-visible': isComplete }"
-        >.</span
-      >
+          <span class="sentence-period" :class="{ 'is-visible': isComplete }"
+            >.</span
+          >
+        </div>
+      </div>
+
     </div>
 
-    <Transition name="preview-fade">
-      <p v-if="isComplete" class="sentence-preview" aria-live="polite">
-        {{ sentence }}.
-      </p>
-    </Transition>
+    <!-- DIVIDER -->
+    <div class="divider" aria-hidden="true">
+      <button
+        v-if="hasAny"
+        class="reset-btn"
+        type="button"
+        @click="reset"
+        aria-label="Clear sentence"
+      >
+        clear
+      </button>
+    </div>
 
-    <button
-      v-if="hasAny"
-      class="reset-btn"
-      type="button"
-      @click="reset"
-      aria-label="Clear"
-    >
-      clear
-    </button>
+    <!-- RIGHT SIDE: Preview -->
+    <div class="preview-side">
+      <div class="preview-container">
+        <Transition name="preview-fade">
+          <p v-if="isComplete" class="sentence-preview" aria-live="polite">
+            {{ sentence }}.
+          </p>
+        </Transition>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .sentence-builder-root {
   display: flex;
+  gap: 24px;
+  width: 100%;
+  font-family: 'Georgia', 'Times New Roman', serif;
+}
+
+.builder-side {
+  display: flex;
   flex-direction: column;
   gap: 10px;
-  font-family: 'Georgia', 'Times New Roman', serif;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.divider {
+  flex: 0 0 72px;
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 1px;
+  height: 100%;
+  background-color: #e0e0d5;
+}
+
+.preview-side {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.preview-container {
+  width: 100%;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 .sentence-line {
   display: flex;
-  flex-wrap: wrap;
   align-items: baseline;
-  gap: 2px 0;
-  font-size: clamp(18px, 2.4vw, 28px);
+  gap: 4px;
+  font-size: var(--sentence-font-size);
   font-weight: 400;
   color: #111;
   line-height: 1.6;
   letter-spacing: -0.01em;
+  flex-wrap: wrap;
 }
 
 .sentence-prefix {
-  margin-right: 4px;
+  flex-shrink: 0;
+  margin-right: 2px;
   color: #555;
   font-style: italic;
   white-space: nowrap;
+}
+
+.slots-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: baseline;
+  flex: 1;
 }
 
 .sentence-period {
   opacity: 0;
   transition: opacity 0.3s;
   font-size: inherit;
+  flex-shrink: 0;
 }
 .sentence-period.is-visible {
   opacity: 1;
 }
 
 .sentence-preview {
-  font-size: 13px;
-  color: #777;
+  font-size: var(--sentence-font-size);
+  color: #555;
   letter-spacing: 0.01em;
   font-style: italic;
   margin: 0;
-  padding-left: 2px;
+  padding: 0;
+  line-height: 1.6;
+  word-wrap: break-word;
 }
 
 .reset-btn {
-  align-self: flex-start;
-  background: none;
-  border: none;
+  position: relative;
+  z-index: 1;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d1d1c5;
+  border-radius: 999px;
+  background: #f7f4ee;
   padding: 0;
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #bbb;
+  color: #7a7a6b;
   cursor: pointer;
   font-family: inherit;
-  transition: color 0.15s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s,
+    transform 0.15s;
 }
 .reset-btn:hover {
-  color: #555;
+  color: #3f3f36;
+  border-color: #b9b9aa;
+  background: #fff;
+  transform: translateY(-1px);
+}
+
+.reset-btn:focus-visible {
+  outline: 2px solid #8a8a7a;
+  outline-offset: 2px;
 }
 
 .preview-fade-enter-active {

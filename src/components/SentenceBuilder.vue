@@ -1,64 +1,81 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+// @ts-nocheck
+import { computed, watch } from 'vue'
 import SentenceSlot from './SentenceSlot.vue'
-import {
-  SUBJECTS,
-  MODAL_VERBS,
-  OPINIONS,
-  type OpinionRow,
-} from '../data/opinions'
+import { opinions } from '../opinions.js'
+import { antiThesis } from '../anti-thesis.js'
 
 interface Props {
+  subject: string
+  opinion: string
   fontSize?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  subject: '',
+  opinion: '',
   fontSize: 'clamp(16px, 2.1vw, 18px)',
 })
 
-// ── All static option lists (no cascade filtering) ───────────
-const subjectOptions = SUBJECTS
-const modalOptions = MODAL_VERBS
-const verbOptions = [...new Set(OPINIONS.map((o) => o.verb))]
-const complementOptions = [...new Set(OPINIONS.map((o) => o.complement))]
+type OpinionGroup = {
+  subject: string
+  opinions: string[]
+}
 
-// ── State — all slots fully independent ──────────────────────
-const subject = ref('')
-const modalVerb = ref('')
-const verb = ref('')
-const complement = ref('')
+const opinionGroups = opinions as OpinionGroup[]
+
+const subjectOptions = computed(() =>
+  [...new Set(opinionGroups.map((item) => item.subject))].sort(),
+)
+
+const currentOpinionOptions = computed(() => {
+  if (!props.subject) return []
+  const selectedGroup = opinionGroups.find(
+    (item) => item.subject === props.subject,
+  )
+  return selectedGroup?.opinions || []
+})
+
+const subject = computed({
+  get: () => props.subject,
+  set: (value: string) => {
+    emit('update:subject', value)
+    if (props.opinion) {
+      emit('update:opinion', '')
+    }
+  },
+})
+
+const opinion = computed({
+  get: () => props.opinion,
+  set: (value: string) => {
+    emit('update:opinion', value)
+  },
+})
 
 // ── Sentence ─────────────────────────────────────────────────
 const sentence = computed(() =>
-  [
-    'I believe that',
-    subject.value,
-    modalVerb.value,
-    verb.value,
-    complement.value,
-  ]
-    .filter(Boolean)
-    .join(' '),
+  props.subject && props.opinion
+    ? `I believe that ${props.subject} should ${props.opinion}`
+    : '',
 )
 
-const isComplete = computed(
-  () => !!(subject.value && modalVerb.value && verb.value && complement.value),
-)
+const isComplete = computed(() => !!sentence.value)
 
 // ── Emits ─────────────────────────────────────────────────────
 const emit = defineEmits<{
-  complete: [sentence: string, parts: Partial<OpinionRow>]
+  complete: [sentence: string, parts: { subject: string; opinion: string }]
   change: [sentence: string]
+  'update:subject': [value: string]
+  'update:opinion': [value: string]
 }>()
 
 watch(sentence, (s) => {
   emit('change', s)
   if (isComplete.value) {
     emit('complete', s, {
-      subject: subject.value,
-      modalVerb: modalVerb.value,
-      verb: verb.value,
-      complement: complement.value,
+      subject: props.subject,
+      opinion: props.opinion,
     })
   }
 })
@@ -67,24 +84,32 @@ watch(sentence, (s) => {
 function injectSubject(word: string) {
   subject.value = word.toLowerCase().trim()
 }
-function injectComplement(word: string) {
-  complement.value = word.toLowerCase().trim()
+
+function injectOpinion(word: string) {
+  opinion.value = word.toLowerCase().trim()
 }
 
 // ── Reset ─────────────────────────────────────────────────────
 function reset() {
-  subject.value = modalVerb.value = verb.value = complement.value = ''
+  emit('update:subject', '')
+  emit('update:opinion', '')
 }
 
-const hasAny = computed(
-  () => !!(subject.value || modalVerb.value || verb.value || complement.value),
-)
+const hasAny = computed(() => !!(props.subject || props.opinion))
 
-defineExpose({ injectSubject, injectComplement })
+const antiThesisText = computed(() => {
+  if (!sentence.value) return ''
+  return antiThesis[sentence.value] || ''
+})
+
+defineExpose({ injectSubject, injectOpinion })
 </script>
 
 <template>
-  <div class="sentence-builder-root" :style="{ '--sentence-font-size': props.fontSize }">
+  <div
+    class="sentence-builder-root"
+    :style="{ '--sentence-font-size': props.fontSize }"
+  >
     <!-- LEFT SIDE: Builder -->
     <div class="builder-side">
       <div class="sentence-line" role="group" aria-label="Sentence builder">
@@ -97,22 +122,11 @@ defineExpose({ injectSubject, injectComplement })
             placeholder="subject"
             slot-type="subject"
           />
+          <span class="sentence-linker">should</span>
           <SentenceSlot
-            v-model="modalVerb"
-            :options="modalOptions"
-            placeholder="should…"
-            slot-type="modal"
-          />
-          <SentenceSlot
-            v-model="verb"
-            :options="verbOptions"
-            placeholder="verb"
-            slot-type="verb"
-          />
-          <SentenceSlot
-            v-model="complement"
-            :options="complementOptions"
-            placeholder="…"
+            v-model="opinion"
+            :options="currentOpinionOptions"
+            placeholder="opinion"
             slot-type="complement"
           />
 
@@ -121,7 +135,6 @@ defineExpose({ injectSubject, injectComplement })
           >
         </div>
       </div>
-
     </div>
 
     <!-- DIVIDER -->
@@ -141,8 +154,11 @@ defineExpose({ injectSubject, injectComplement })
     <div class="preview-side">
       <div class="preview-container">
         <Transition name="preview-fade">
-          <p v-if="isComplete" class="sentence-preview" aria-live="polite">
-            {{ sentence }}.
+          <p v-if="antiThesisText" class="sentence-preview" aria-live="polite">
+            {{ antiThesisText }}
+          </p>
+          <p v-else class="sentence-preview sentence-preview--placeholder">
+            Select a subject and opinion to see the counterpoint
           </p>
         </Transition>
       </div>
@@ -228,6 +244,11 @@ defineExpose({ injectSubject, injectComplement })
   flex: 1;
 }
 
+.sentence-linker {
+  color: #555;
+  white-space: nowrap;
+}
+
 .sentence-period {
   opacity: 0;
   transition: opacity 0.3s;
@@ -247,6 +268,14 @@ defineExpose({ injectSubject, injectComplement })
   padding: 0;
   line-height: 1.6;
   word-wrap: break-word;
+}
+
+.sentence-preview--anti {
+  color: #6a3422;
+}
+
+.sentence-preview--placeholder {
+  color: #9b9b90;
 }
 
 .reset-btn {

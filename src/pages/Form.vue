@@ -1,3 +1,10 @@
-<script setup lang="ts"></script>
+<!-- In your /form page component -->
+<template>
+  <div class="bg-[#0a0a0f] w-full h-screen">
+    <CategoryScatter />
+  </div>
+</template>
 
-<template>2222</template>
+<script setup lang="ts">
+import CategoryScatter from '../components/CategoryScatter.vue'
+</script>

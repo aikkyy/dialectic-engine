@@ -1,6 +1,6 @@
 <!-- In your /form page component -->
 <template>
-  <div class="bg-[#0a0a0f] w-full h-screen">
+  <div class="w-full h-screen">
     <CategoryScatter />
   </div>
 </template>

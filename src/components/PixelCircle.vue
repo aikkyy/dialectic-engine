@@ -323,9 +323,7 @@ function pixelStyle(p: Pixel, i: number) {
         width: '100%',
       }"
     >
-      <span
-        class="text-center leading-tight tracking-widest uppercase font-mono"
-      >
+      <span class="circle-text text-center leading-tight tracking-widest">
         {{ props.text }}
       </span>
     </div>
@@ -344,5 +342,10 @@ function pixelStyle(p: Pixel, i: number) {
 }
 .pixel-circle-clickable:active {
   transform: scale(0.96);
+}
+.circle-text {
+  font-family:
+    Gap Sans,
+    sans-serif;
 }
 </style>

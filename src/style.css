@@ -6,7 +6,7 @@
   font-weight: normal;
   src:
     local('Gap Sans'),
-    url('fonts/GapSans.woff2') format('woff2');
+    url('/fonts/GapSans.woff2') format('woff2');
 }
 
 @font-face {
@@ -15,7 +15,7 @@
   font-weight: normal;
   src:
     local('Reddit Mono'),
-    url('fonts/RedditMono-Regular.woff2') format('woff2');
+    url('/fonts/RedditMono-Regular.woff2') format('woff2');
 }
 
 /* =========================================================

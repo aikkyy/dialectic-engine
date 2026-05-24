@@ -23,7 +23,7 @@ const goBack = () => {
     </Button>
     <button
       v-if="!isHome"
-      class="absolute top-3 right-4 z-10 group inline-flex h-6 w-6 items-center justify-center cursor-pointer"
+      class="absolute top-10 right-6 z-10 group inline-flex h-6 w-6 items-center justify-center cursor-pointer"
       type="button"
       aria-label="Go back"
       @click="goBack"

@@ -2,7 +2,7 @@
   <!-- <ChladniBackground color="#ffffff" bgColor="#0f0f14" audioSrc="/base.mp3" /> -->
   <ChladniBackground color="#ffffff" bgColor="#0f0f14" />
   <p
-    class="plusafter absolute top-32 left-18 z-10 text-base text-white max-w-xs"
+    class="plusafter absolute top-32 left-18 z-10 text-base text-white max-w-xs bg-black"
   >
     {{ texts[currentIndex] }}
   </p>
@@ -10,7 +10,8 @@
   <p
     class="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 text-base text-white"
   >
-    thesis <span class="smallplus"></span>antithesis <span class="arrowright">more robust synthesis of the truth</span>
+    thesis <span class="smallplus"></span>antithesis
+    <span class="arrowright">more robust synthesis of the truth</span>
   </p>
 </template>
 
@@ -102,21 +103,23 @@ onUnmounted(() => {
   border-left: var(--plus-thickness) solid currentColor;
 }
 .arrowright {
-  margin-left: 4rem;            /* external spacing – optional */
+  margin-left: 4rem; /* external spacing – optional */
   position: relative;
   display: inline-block;
 
   /* Custom properties */
-  --shaft-length: 2rem;         /* length of the horizontal line */
-  --shaft-thickness: 1px;  /* thickness of the shaft & arrowhead outline */
-  --arrowhead-size: 0.5rem;     /* size of the triangle (height = base width) */
-  --arrow-offset: -3.5rem;        /* left offset (negative moves it left) */
+  --shaft-length: 2rem; /* length of the horizontal line */
+  --shaft-thickness: 1px; /* thickness of the shaft & arrowhead outline */
+  --arrowhead-size: 0.5rem; /* size of the triangle (height = base width) */
+  --arrow-offset: -3.5rem; /* left offset (negative moves it left) */
 
   color: currentColor;
 
   /* Give the parent enough height and width to contain the absolute children */
-  height: 1.5rem;               /* adjust to your needs */
-  min-width: calc(var(--shaft-length) + var(--arrowhead-size) - var(--arrow-offset));
+  height: 1.5rem; /* adjust to your needs */
+  min-width: calc(
+    var(--shaft-length) + var(--arrowhead-size) - var(--arrow-offset)
+  );
 }
 
 /* Shaft: horizontal line */
@@ -143,7 +146,8 @@ onUnmounted(() => {
   height: 0;
   border-style: solid;
   /* triangle using the left border */
-  border-width: calc(var(--arrowhead-size) / 2) 0 calc(var(--arrowhead-size) / 2) var(--arrowhead-size);
+  border-width: calc(var(--arrowhead-size) / 2) 0
+    calc(var(--arrowhead-size) / 2) var(--arrowhead-size);
   border-color: transparent transparent transparent currentColor;
 }
 </style>

@@ -41,7 +41,7 @@ function getFontSize(circleSize: number): number {
 }
 
 function reset() {
-  router.push('/form')
+  router.push({ name: 'Form' })
 }
 </script>
 

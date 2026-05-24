@@ -5,7 +5,11 @@ import Button from './components/Button.vue'
 
 const route = useRoute()
 const router = useRouter()
-const isHome = computed(() => route.name === 'Home')
+const isHome = computed(() => {
+  if (route.matched.some((record) => record.name === 'Home')) return true
+  const normalizedPath = route.path.replace(/\/+$/, '')
+  return normalizedPath === '' || normalizedPath === '/'
+})
 
 const goBack = () => {
   router.back()
@@ -15,7 +19,7 @@ const goBack = () => {
 <template>
   <main class="h-screen">
     <router-link
-      to="/"
+      :to="{ name: 'Home' }"
       class="absolute top-3 left-4 z-10 flex items-center gap-3 text-white cursor-pointer"
       aria-label="Go to home"
     >

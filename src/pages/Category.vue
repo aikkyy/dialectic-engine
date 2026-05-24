@@ -484,7 +484,7 @@ function handleClick(idx: number) {
     navigating = true
     router
       .push({
-        path: '/result',
+        name: 'Result',
         query: {
           opinion: node.opinionText || '',
           antithesis: node.antithesisText || '',

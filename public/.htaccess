@@ -1,0 +1,12 @@
+Options -MultiViews
+RewriteEngine On
+
+# Set base path - adjust if your subfolder is different
+RewriteBase /dialectic-engine/
+
+# Don't rewrite actual files or directories
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Redirect everything else to index.html so Vue Router handles it
+RewriteRule ^ index.html [L]

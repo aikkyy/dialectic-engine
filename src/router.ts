@@ -10,14 +10,12 @@ const routes = [
   { path: '/form', name: 'Form', component: FormPage },
   { path: '/form/:category', name: 'Category', component: CategoryPage },
   { path: '/archives', name: 'Archives', component: ArchivesPage },
-  {
-    path: '/result',
-    name: 'Result',
-    component: ResultPage,
-  },
+  { path: '/result', name: 'Result', component: ResultPage },
 ]
 
 export const router = createRouter({
+  // import.meta.env.BASE_URL automatically picks up the `base` from vite.config.ts
+  // so this correctly becomes '/dialectic-engine/' in production
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })

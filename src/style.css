@@ -63,9 +63,10 @@ body,
 
 body {
   overflow-x: hidden;
-  background:
+  background: #0a0a0f;
+  /* background:
     radial-gradient(circle at top, rgba(139, 92, 246, 0.15), transparent 35%),
-    var(--bg);
+    var(--bg); */
 
   color: var(--text);
 }

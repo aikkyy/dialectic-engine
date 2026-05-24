@@ -6,11 +6,11 @@
  * No absolute positioning — uses CSS translate offsets for organic scatter.
  *
  * Layout approach (no collision detection needed):
- *   • Flex-wrap with fixed-size cells (size + padding)
- *   • Each cell gets a deterministic translateX/Y offset so the grid
- *     structure disappears but circles never actually overlap
- *   • Offset is clamped so no circle leaves its cell boundary
- *   • Margins vary per-row to break up horizontal alignment
+ * • Flex-wrap with fixed-size cells (size + padding)
+ * • Each cell gets a deterministic translateX/Y offset so the grid
+ * structure disappears but circles never actually overlap
+ * • Offset is clamped so no circle leaves its cell boundary
+ * • Margins vary per-row to break up horizontal alignment
  */
 
 import { computed } from 'vue'
@@ -47,7 +47,8 @@ function hash(a: number, b = 0): number {
 
 // ── Node configs ──────────────────────────────────────────────────────────────
 
-const SIZES = [120, 160, 200] // three tiers — small / medium / large
+const MIN_BASE_SIZE = 100
+const MAX_BASE_SIZE = 270
 
 type NodeData = {
   keyword: string
@@ -88,12 +89,19 @@ const nodes = computed<NodeData[]>(() => {
     const h4 = hash(idx, 5)
     const h5 = hash(idx, 6)
 
-    const tier = idx % 3
-    const size = SIZES[tier] + Math.round((h0 - 0.5) * 20)
+    // Determine scale dynamically based on text length (~9.5px extra per character)
+    const textLen = op.category.length
+    let baseSize = 80 + textLen * 9.5
+
+    // Clamp to prevent unreadably tiny dots or massive screen-hogging blobs
+    baseSize = Math.max(MIN_BASE_SIZE, Math.min(MAX_BASE_SIZE, baseSize))
+
+    // Add noise for organic feel (-15 to +15 px)
+    const size = Math.round(baseSize + (h0 - 0.5) * 30)
 
     // Translate offset: max ±(cellSize - size)/2 so circles can't leave cell
-    // Cell is size + 60px padding each side; max offset = 30px
-    const maxOffset = 28
+    // Max offset capped here directly
+    const maxOffset = 26
     const tx = Math.round((h1 - 0.5) * 2 * maxOffset)
     const ty = Math.round((h2 - 0.5) * 2 * maxOffset)
 
@@ -103,13 +111,13 @@ const nodes = computed<NodeData[]>(() => {
       size,
       pixelSize: 4 + Math.round(h3 * 2), // 2–4
       gap: 2 + Math.round(h4 * 2), // 2–4
-      density: 0.5 + h0 * 0.18, // 0.50–0.68
-      fadeStrength: 1.8 + h1 * 1.0, // 1.8–2.8
+      density: 0.3 + h0 * 0.18, // 0.30–0.48
+      fadeStrength: 1.5 + h1 * 1.0, // 1.5–2.5
       randomness: 0.6 + h2 * 0.28, // 0.60–0.88
-      fontSize: tier === 0 ? 9 : tier === 1 ? 11 : 13,
+      fontSize: size < 130 ? 10 : size < 180 ? 12 : 13,
       color: PALETTE[idx % PALETTE.length],
       textColor: PALETTE[idx % PALETTE.length],
-      animDensity: 0.08 + h5 * 0.1, // 8–18% pixels animate
+      animDensity: 0.18 + h5 * 0.1, // 8–18% pixels animate
       tx,
       ty,
       opacity: 0.65 + h3 * 0.35, // 0.65–1.0
@@ -117,29 +125,20 @@ const nodes = computed<NodeData[]>(() => {
   })
 })
 
-// Cell size = largest possible size + padding
-// All cells are uniform so flex-wrap stays aligned
+// Cell size = largest rendered circle size + padding
+// Calculates dynamically based on nodes so the grid doesn't space out excessively if max string is short.
 const CELL_PAD = 60 // px of breathing room each cell gets beyond its circle
-const cellSize = computed(() => Math.max(...SIZES) + CELL_PAD)
+const cellSize = computed(() => {
+  if (nodes.value.length === 0) return 200 // safe fallback
+  const maxRenderedSize = Math.max(...nodes.value.map((n) => n.size))
+  return maxRenderedSize + CELL_PAD
+})
 </script>
 
 <template>
-  <!--
-    Flex-wrap container.
-    justify-content: space-evenly distributes cells evenly on each row.
-    No absolute positioning — everything is in normal flow.
-    The `transform` on each cell shifts it off-grid organically.
-  -->
   <div
-    class="w-full min-h-screen flex flex-wrap items-center justify-evenly"
-    style="align-content: space-evenly"
+    class="w-full min-h-screen flex flex-wrap items-center justify-evenly mt-22 space-evenly bg-[#0a0a0f]"
   >
-    <!--
-      Each "cell" is a fixed-size flex item that centers the PixelCircle inside.
-      The cell itself is invisible — just a layout anchor.
-      The transform nudges the circle off-center without affecting layout flow,
-      so no circles overlap (the cell boundaries still separate them).
-    -->
     <div
       v-for="node in nodes"
       :key="node.keyword"

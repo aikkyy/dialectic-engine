@@ -1,33 +1,19 @@
 <script setup lang="ts">
 /**
- * PixelCircle.vue — Performance edition
+ * PixelCircle.vue – Fully animated per-pixel
  * ─────────────────────────────────────────────────────────────────────────────
- * Key optimisations vs previous version:
+ * Every pixel has its own animation behaviour:
+ * • Intensity (0 = static, 1 = full sparkle)
+ * • Waveform (sine / triangle / pulse)
+ * • Period (1.2s – 7.2s)
+ * • Phase offset
  *
- *  1. Pixel array is precomputed once in a computed() and never recalculated
- *     unless props change (Vue's dependency tracking handles this).
- *
- *  2. Animation uses a single shared requestAnimationFrame ticker imported
- *     from a tiny shared module (useTicker). Each PixelCircle registers a
- *     cheap callback — no per-component RAF, no timers.
- *
- *  3. Only ~15% of pixels participate in animation at any time. Each
- *     "animated" pixel has a pre-assigned phase and period so the flicker
- *     is staggered and never all fires at once.
- *
- *  4. Pixel DOM nodes are rendered with v-memo so Vue skips diffing unchanged
- *     pixels entirely. Only the style.opacity of blinking pixels changes.
- *
- *  5. CSS transitions on opacity (0.6s ease) so the browser handles the
- *     interpolation — no JS involved in the actual fade.
- *
- *  6. will-change: opacity is set only on animated pixels, not all of them.
+ * Props.animationDensity globally scales all animations (0 = off, 1 = max).
+ * All pixels animate, but low‑intensity pixels change very subtly.
  */
 
-import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useTicker } from '../useTicker'
-
-// ─── Props ────────────────────────────────────────────────────────────────────
 
 export type PixelCircleProps = {
   text?: string
@@ -43,9 +29,9 @@ export type PixelCircleProps = {
   clickable?: boolean
   zIndex?: number
   className?: string
-  /** fraction of pixels that animate (0–1). Default 0.12 */
+  /** Controls what percentage of pixels will animate (0–1). Default 0.55 (55%) */
   animationDensity?: number
-  /** disable all animation */
+  /** Disable all animation */
   static?: boolean
 }
 
@@ -63,14 +49,13 @@ const props = withDefaults(defineProps<PixelCircleProps>(), {
   clickable: false,
   zIndex: 0,
   className: '',
-  animationDensity: 0.12,
+  animationDensity: 0.55,
   static: false,
 })
 
 const emit = defineEmits<{ click: [e: MouseEvent] }>()
 
 // ─── Deterministic hash ───────────────────────────────────────────────────────
-
 function hash(a: number, b = 0): number {
   let h = a * 374761393 + b * 1234567891
   h = ((h ^ (h >>> 13)) * 1274126177) | 0
@@ -78,21 +63,21 @@ function hash(a: number, b = 0): number {
   return (h >>> 0) / 0xffffffff
 }
 
-// ─── Pixel data ───────────────────────────────────────────────────────────────
-
+// ─── Pixel data (now with per‑pixel animation parameters) ────────────────────
 type Pixel = {
-  // Layout (never changes)
   left: number
   top: number
   width: number
   height: number
-  // Visual
   baseOpacity: number
-  // Animation (null = static pixel)
-  animPhase: number | null // 0..1 phase offset
-  animPeriod: number | null // ms for one full blink cycle
+  // Animation properties (always present, intensity may be zero)
+  animIntensity: number // 0 … 1 (scaled by props.animationDensity)
+  animPeriod: number // milliseconds
+  animPhase: number // 0 … 1
+  animWave: 0 | 1 | 2 // 0=sine, 1=triangle, 2=pulse (sin²)
 }
 
+// Pre‑compute pixels once when props change
 const pixels = computed<Pixel[]>(() => {
   const step = props.pixelSize + props.gap
   const cells = Math.floor(props.size / step)
@@ -100,7 +85,7 @@ const pixels = computed<Pixel[]>(() => {
   const outerR = half - 0.5
   const innerR = outerR * props.density
   const result: Pixel[] = []
-  let animIdx = 0
+  let pixelId = 0
 
   for (let row = 0; row < cells; row++) {
     for (let col = 0; col < cells; col++) {
@@ -111,103 +96,166 @@ const pixels = computed<Pixel[]>(() => {
 
       const h0 = hash(col, row)
       const h1 = hash(col + 500, row + 500)
+      const h2 = hash(col + 1000, row + 1000)
 
-      // Inner scatter zone
+      // ---------- Determine if pixel exists (same logic as before) ----------
+      let baseOpacity = 0
+      let width = props.pixelSize
+      let height = props.pixelSize
+      let left = col * step
+      let top = row * step
+
+      // Inner scatter zone (low density fill)
       if (dist < innerR) {
         const innerFrac = dist / innerR
         const scatterP = 0.04 * innerFrac * innerFrac
         if (h0 > scatterP) continue
-        const opacity = scatterP * (1 - h0) * 0.4
+        baseOpacity = scatterP * (1 - h0) * 0.4
         const dim = props.pixelSize * (0.6 + h0 * 0.4)
-        result.push({
-          left: col * step + (props.pixelSize - dim) / 2,
-          top: row * step + (props.pixelSize - dim) / 2,
-          width: dim,
-          height: dim,
-          baseOpacity: opacity,
-          animPhase: null,
-          animPeriod: null,
-        })
-        continue
+        left += (props.pixelSize - dim) / 2
+        top += (props.pixelSize - dim) / 2
+        width = dim
+        height = dim
+      } else {
+        // Ring zone
+        const t = Math.max(0, Math.min(1, (dist - innerR) / (outerR - innerR)))
+        const baseDensity = Math.pow(t, props.fadeStrength)
+        const noiseGate = 1 - props.randomness * h0
+        if (baseDensity * noiseGate < 0.08) continue
+
+        const angle = Math.atan2(dy, dx)
+        const angularWobble =
+          1 - 0.15 * Math.abs(Math.sin(angle * 3.7 + h0 * 2))
+        baseOpacity =
+          Math.min(1, baseDensity * noiseGate * angularWobble) *
+          (0.55 + h0 * 0.45)
+        const dim = props.pixelSize * (0.7 + t * 0.3)
+        left += (props.pixelSize - dim) / 2
+        top += (props.pixelSize - dim) / 2
+        width = dim
+        height = dim
       }
 
-      // Ring zone
-      const t = Math.max(0, Math.min(1, (dist - innerR) / (outerR - innerR)))
-      const baseDensity = Math.pow(t, props.fadeStrength)
-      const noiseGate = 1 - props.randomness * h0
-      if (baseDensity * noiseGate < 0.08) continue
+      // ---------- Per‑pixel animation parameters (always computed) ----------
+      let animIntensity = 0
+      let animPeriod = 2000
+      let animPhase = 0
+      let animWave: 0 | 1 | 2 = 0
 
-      const angle = Math.atan2(dy, dx)
-      const angularWobble = 1 - 0.15 * Math.abs(Math.sin(angle * 3.7 + h0 * 2))
-      const baseOpacity =
-        Math.min(1, baseDensity * noiseGate * angularWobble) *
-        (0.55 + h0 * 0.45)
-      const dim = props.pixelSize * (0.7 + t * 0.3)
+      if (!props.static) {
+        // Use a threshold to decide IF this pixel animates at all
+        const isAnimatedPixel = hash(pixelId, 88) < props.animationDensity
 
-      // Assign animation to a fraction of ring pixels
-      let animPhase: number | null = null
-      let animPeriod: number | null = null
-      if (!props.static && h1 < props.animationDensity) {
-        animPhase = hash(animIdx, 7)
-        animPeriod = 1800 + hash(animIdx, 13) * 3200 // 1.8 – 5 s
-        animIdx++
+        if (isAnimatedPixel) {
+          // Raw random intensity for the ones that do animate
+          const rawIntensity = hash(pixelId, 17)
+          animIntensity = 0.4 + rawIntensity * 0.6 // Stronger blink/fade for active pixels
+
+          // Period: 1.2s … 7.2s (shorter = more energetic)
+          animPeriod = 1200 + rawIntensity * 6000
+
+          // Phase: 0 … 1, completely random
+          animPhase = hash(pixelId, 42)
+
+          // Waveform type based on another hash
+          const w = Math.floor(hash(pixelId, 99) * 3)
+          animWave = w === 0 ? 0 : w === 1 ? 1 : 2
+        }
       }
 
       result.push({
-        left: col * step + (props.pixelSize - dim) / 2,
-        top: row * step + (props.pixelSize - dim) / 2,
-        width: dim,
-        height: dim,
+        left,
+        top,
+        width,
+        height,
         baseOpacity,
-        animPhase,
+        animIntensity,
         animPeriod,
+        animPhase,
+        animWave,
       })
+      pixelId++
     }
   }
   return result
 })
 
-// ─── Animation ────────────────────────────────────────────────────────────────
-// Each animated pixel gets an entry in animOpacities keyed by pixel index.
-// We use a shallowRef array so Vue only re-renders the changed entries.
-
+// ─── Animation state ──────────────────────────────────────────────────────────
+// Current opacity for each pixel (updated every frame by ticker)
 const animOpacities = shallowRef<Float32Array>(new Float32Array(0))
-
-// Initialise array when pixels change
 let opArray = new Float32Array(0)
 
-// The ticker callback — runs on every shared RAF frame.
-// Only updates animated pixels; static pixels are never touched.
+// Helper: compute blink factor (0 … 1) based on waveform, time, period and phase
+function getBlinkFactor(
+  now: number,
+  period: number,
+  phase: number,
+  wave: number,
+): number {
+  const t = (now / period + phase) % 1
+  switch (wave) {
+    case 0: // sine
+      return 0.5 + 0.5 * Math.sin(t * Math.PI * 2)
+    case 1: // triangle
+      return t < 0.5 ? t * 2 : 2 - t * 2
+    case 2: // pulse (sin², sharp rise / soft fall)
+      const sinVal = Math.sin(t * Math.PI)
+      return sinVal * sinVal
+    default:
+      return t
+  }
+}
+
+// Shared ticker callback – updates every pixel that has animIntensity > 0
 function onTick(now: number) {
   let dirty = false
   const px = pixels.value
   for (let i = 0; i < px.length; i++) {
     const p = px[i]
-    if (p.animPhase === null || p.animPeriod === null) continue
-    // Smooth sine blink: 0.15 → 1.0 range
-    const phase = (now / p.animPeriod + p.animPhase) % 1
-    const blink = 0.15 + 0.85 * (0.5 + 0.5 * Math.sin(phase * Math.PI * 2))
-    const next = p.baseOpacity * blink
-    if (Math.abs(opArray[i] - next) > 0.005) {
+    if (p.animIntensity <= 0.001) continue
+
+    const blink = getBlinkFactor(now, p.animPeriod, p.animPhase, p.animWave)
+    // intensity controls how far opacity moves away from base:
+    //   intensity = 0 → always baseOpacity
+    //   intensity = 1 → ranges between baseOpacity * 0.5 and baseOpacity * 1.5
+    const range = 0.5 + p.animIntensity * 1.0
+    const next = p.baseOpacity * (0.5 + blink * range)
+
+    if (Math.abs(opArray[i] - next) > 0.003) {
       opArray[i] = next
       dirty = true
     }
   }
   if (dirty) {
-    // Trigger Vue reactivity with the same underlying buffer
     animOpacities.value = opArray
   }
 }
 
 const { register, unregister } = useTicker()
 
-onMounted(() => {
-  opArray = new Float32Array(pixels.value.length)
-  // Seed initial opacities with base values
-  pixels.value.forEach((p, i) => {
-    opArray[i] = p.baseOpacity
-  })
+// Watch pixels to reallocate opacity array and reseed static values
+function rebuildOpacityArray() {
+  const px = pixels.value
+  const newArr = new Float32Array(px.length)
+  for (let i = 0; i < px.length; i++) {
+    // Start with base opacity (non‑animated state)
+    newArr[i] = px[i].baseOpacity
+  }
+  opArray = newArr
   animOpacities.value = opArray
+}
+
+// Rebuild when pixels change (props change)
+watch(
+  pixels,
+  () => {
+    rebuildOpacityArray()
+  },
+  { immediate: false },
+)
+
+onMounted(() => {
+  rebuildOpacityArray()
   if (!props.static) register(onTick)
 })
 
@@ -216,7 +264,6 @@ onUnmounted(() => {
 })
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-
 const wrapperStyle = computed(() => ({
   width: `${props.size}px`,
   height: `${props.size}px`,
@@ -229,7 +276,8 @@ const wrapperStyle = computed(() => ({
 const textMaxWidth = computed(() => `${props.size * props.density * 0.75}px`)
 
 function pixelStyle(p: Pixel, i: number) {
-  const animated = p.animPhase !== null
+  // We remove the CSS transition here so that JS requestAnimationFrame ticks
+  // can control exact blinks/fades without CSS creating a mushy delay.
   return {
     position: 'absolute' as const,
     left: `${p.left}px`,
@@ -237,15 +285,9 @@ function pixelStyle(p: Pixel, i: number) {
     width: `${p.width}px`,
     height: `${p.height}px`,
     background: props.color,
-    opacity: animated ? animOpacities.value[i] : p.baseOpacity,
+    opacity: animOpacities.value[i],
     borderRadius: '0.5px',
-    // Only set transition + will-change on the pixels that actually animate
-    ...(animated
-      ? {
-          transition: 'opacity 0.5s ease',
-          willChange: 'opacity',
-        }
-      : {}),
+    willChange: p.animIntensity > 0.01 ? 'opacity' : 'auto',
   }
 }
 </script>
@@ -261,10 +303,6 @@ function pixelStyle(p: Pixel, i: number) {
     @click="(e) => emit('click', e)"
   >
     <div class="absolute inset-0" aria-hidden="true">
-      <!--
-        v-memo: only re-render a pixel when its opacity actually changes.
-        For static pixels this means never — massive save on large grids.
-      -->
       <div
         v-for="(p, i) in pixels"
         :key="i"
@@ -274,14 +312,22 @@ function pixelStyle(p: Pixel, i: number) {
     </div>
 
     <div
-      class="absolute inset-0 flex items-center justify-center"
-      :style="{ color: props.textColor, fontSize: `${props.fontSize}px` }"
+      class="absolute pointer-events-none flex flex-col items-center justify-center"
+      :style="{
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        color: props.textColor,
+        fontSize: `${props.fontSize}px`,
+        maxWidth: textMaxWidth,
+        width: '100%',
+      }"
     >
       <span
-        class="text-center leading-tight tracking-widest uppercase font-mono pointer-events-none"
-        :style="{ maxWidth: textMaxWidth }"
-        >{{ props.text }}</span
+        class="text-center leading-tight tracking-widest uppercase font-mono"
       >
+        {{ props.text }}
+      </span>
     </div>
   </div>
 </template>

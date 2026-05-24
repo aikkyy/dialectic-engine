@@ -12,7 +12,7 @@
  * All pixels animate, but low‑intensity pixels change very subtly.
  */
 
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
 import { useTicker } from '../useTicker'
 
 export type PixelCircleProps = {
@@ -95,8 +95,6 @@ const pixels = computed<Pixel[]>(() => {
       if (dist > outerR) continue
 
       const h0 = hash(col, row)
-      const h1 = hash(col + 500, row + 500)
-      const h2 = hash(col + 1000, row + 1000)
 
       // ---------- Determine if pixel exists (same logic as before) ----------
       let baseOpacity = 0

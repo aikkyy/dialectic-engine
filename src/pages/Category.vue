@@ -491,17 +491,6 @@ function handleClick(idx: number) {
   }
 }
 
-function goBack() {
-  if (viewState.value === 'opinions') {
-    viewState.value = 'keywords'
-    activeKeywordEntry.value = null
-    rebuildNodes()
-    resetView()
-  } else {
-    router.back()
-  }
-}
-
 function onMouseMove(e: MouseEvent) {
   if (navigating) return
   if (dragging) {

@@ -10,6 +10,7 @@ import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { engineOpinions } from '../data/engineOpinions'
 import type { EngineOpinionType } from '../data/engineOpinions'
+import { saveSelectionArchive } from '../utils/selectionArchives'
 
 const route = useRoute()
 const router = useRouter()
@@ -474,6 +475,12 @@ function handleClick(idx: number) {
     node.keywordEntry &&
     node.opinionIdx !== undefined
   ) {
+    saveSelectionArchive({
+      category: category.value,
+      keyword: node.keyword || '',
+      opinion: node.opinionText || '',
+      antithesis: node.antithesisText || '',
+    })
     navigating = true
     router
       .push({

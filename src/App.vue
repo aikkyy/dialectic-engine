@@ -14,9 +14,13 @@ const goBack = () => {
 
 <template>
   <main class="h-screen">
-    <div class="absolute top-3 left-4 z-10 flex items-center gap-3 text-white">
+    <router-link
+      to="/"
+      class="absolute top-3 left-4 z-10 flex items-center gap-3 text-white cursor-pointer"
+      aria-label="Go to home"
+    >
       <h1 class="text-xs">Dialectic Engine</h1>
-    </div>
+    </router-link>
 
     <Button v-if="isHome" class="absolute top-3 right-4 z-10" href="/form">
       Start
@@ -41,6 +45,9 @@ const goBack = () => {
         <path d="M11 6L5 12l6 6" />
       </svg>
     </button>
+    <Button class="absolute bottom-3 right-4 z-10" href="/archives">
+      Archives
+    </Button>
     <router-view />
   </main>
 </template>

@@ -1,5 +1,23 @@
 @import 'tailwindcss';
 
+@font-face {
+  font-family: 'Gap Sans';
+  font-style: normal;
+  font-weight: normal;
+  src:
+    local('Gap Sans'),
+    url('fonts/GapSans.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Reddit Mono', monospace;
+  font-style: normal;
+  font-weight: normal;
+  src:
+    local('Reddit Mono'),
+    url('fonts/RedditMono-Regular.woff2') format('woff2');
+}
+
 /* =========================================================
    RESET + DESIGN TOKENS
 ========================================================= */
@@ -17,15 +35,6 @@
   --primary: #8b5cf6;
   --primary-soft: rgba(139, 92, 246, 0.15);
 
-  --radius: 18px;
-
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-
-  --container: 1400px;
-
-  font-family: Inter, system-ui, sans-serif;
-
-  color: var(--text);
   background: var(--bg);
 
   text-rendering: optimizeLegibility;
@@ -40,6 +49,7 @@
 *::before,
 *::after {
   box-sizing: border-box;
+  font-family: 'Reddit Mono', monospace;
 }
 
 html,
@@ -75,25 +85,13 @@ p {
 }
 
 h1 {
+  font-family: 'Gap Sans', sans-serif;
   font-size: clamp(2.5rem, 6vw, 5rem);
-  line-height: 0.95;
-  letter-spacing: -0.04em;
-  font-weight: 700;
 }
 
 h2 {
   font-size: clamp(1.5rem, 4vw, 2.25rem);
   font-weight: 600;
-}
-
-p {
-  color: var(--text-muted);
-  line-height: 1.6;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
 }
 
 /* =========================================================

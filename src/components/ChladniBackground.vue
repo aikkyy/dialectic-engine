@@ -16,11 +16,13 @@ const props = withDefaults(
     audioSrc?: string
     color?: string
     bgColor?: string
+    showDebug?: boolean
   }>(),
   {
     audioSrc: '',
     color: '#ffffff',
     bgColor: '#000000',
+    showDebug: false,
   },
 )
 
@@ -49,6 +51,7 @@ const { modeN, modeM, threshold, audioActive } = useChladni(canvasRef, {
   />
 
   <aside
+    v-if="props.showDebug"
     :style="{
       position: 'fixed',
       top: '12px',

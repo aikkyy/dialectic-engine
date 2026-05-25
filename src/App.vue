@@ -26,7 +26,7 @@ const goBack = () => {
       <h1 class="text-xs">Dialectic Engine</h1>
     </router-link>
 
-    <Button v-if="isHome" class="absolute top-3 right-4 z-10" href="./form">
+    <Button v-if="isHome" class="absolute top-6 right-4 z-10" href="./form">
       Start
     </Button>
     <button
@@ -49,7 +49,7 @@ const goBack = () => {
         <path d="M11 6L5 12l6 6" />
       </svg>
     </button>
-    <Button class="absolute bottom-3 right-4 z-10" href="./archives">
+    <Button class="absolute bottom-2 right-4 z-10" href="./archives">
       Archives
     </Button>
     <router-view />

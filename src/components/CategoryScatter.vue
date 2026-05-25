@@ -167,6 +167,7 @@ let zoom = DEFAULT_ZOOM
 let panX = 0,
   panY = 0
 let dragging = false
+let activePointerId = -1
 let lastMx = 0,
   lastMy = 0
 let didDrag = false
@@ -314,8 +315,8 @@ function resetView() {
   panY = H / 2
 }
 
-function onMouseMove(e: MouseEvent) {
-  if (dragging) {
+function onPointerMove(e: PointerEvent) {
+  if (dragging && e.pointerId === activePointerId) {
     panX += e.clientX - lastMx
     panY += e.clientY - lastMy
     if (Math.abs(e.clientX - lastMx) > 2 || Math.abs(e.clientY - lastMy) > 2)
@@ -326,6 +327,9 @@ function onMouseMove(e: MouseEvent) {
     if (canvasEl.value) canvasEl.value.style.cursor = 'grabbing'
     return
   }
+
+  if (e.pointerType !== 'mouse') return
+
   hoveredIdx = hitTest(e.clientX, e.clientY)
   const n = nodes[hoveredIdx]
   if (canvasEl.value) {
@@ -334,20 +338,39 @@ function onMouseMove(e: MouseEvent) {
   }
 }
 
-function onMouseDown(e: MouseEvent) {
+function onPointerDown(e: PointerEvent) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return
   dragging = true
   didDrag = false
+  activePointerId = e.pointerId
   lastMx = e.clientX
   lastMy = e.clientY
+  hoveredIdx = -1
+  const canvas = canvasEl.value
+  if (canvas) {
+    canvas.setPointerCapture(e.pointerId)
+    canvas.style.cursor = 'grabbing'
+  }
 }
 
-function onMouseUp(e: MouseEvent) {
+function onPointerUp(e: PointerEvent) {
+  if (e.pointerId !== activePointerId) return
   if (!didDrag) {
     const idx = hitTest(e.clientX, e.clientY)
     if (idx >= 0 && nodes[idx].keyword) navigateTo(nodes[idx].keyword!)
   }
   dragging = false
-  if (canvasEl.value) canvasEl.value.style.cursor = 'grab'
+  activePointerId = -1
+  const canvas = canvasEl.value
+  if (canvas) canvas.style.cursor = 'grab'
+}
+
+function onPointerCancel(e: PointerEvent) {
+  if (e.pointerId !== activePointerId) return
+  dragging = false
+  activePointerId = -1
+  const canvas = canvasEl.value
+  if (canvas) canvas.style.cursor = 'grab'
 }
 
 function onWheel(e: WheelEvent) {
@@ -369,11 +392,13 @@ onMounted(() => {
   W = canvas.width = window.innerWidth
   H = canvas.height = window.innerHeight
   resetView()
+  canvas.style.touchAction = 'none'
 
-  canvas.addEventListener('mousemove', onMouseMove)
-  canvas.addEventListener('mousedown', onMouseDown)
+  canvas.addEventListener('pointermove', onPointerMove)
+  canvas.addEventListener('pointerdown', onPointerDown)
+  canvas.addEventListener('pointerup', onPointerUp)
+  canvas.addEventListener('pointercancel', onPointerCancel)
   canvas.addEventListener('wheel', onWheel, { passive: false })
-  window.addEventListener('mouseup', onMouseUp)
   window.addEventListener('resize', onResize)
 
   rafId = requestAnimationFrame(draw)
@@ -383,11 +408,12 @@ onUnmounted(() => {
   cancelAnimationFrame(rafId)
   const canvas = canvasEl.value
   if (canvas) {
-    canvas.removeEventListener('mousemove', onMouseMove)
-    canvas.removeEventListener('mousedown', onMouseDown)
+    canvas.removeEventListener('pointermove', onPointerMove)
+    canvas.removeEventListener('pointerdown', onPointerDown)
+    canvas.removeEventListener('pointerup', onPointerUp)
+    canvas.removeEventListener('pointercancel', onPointerCancel)
     canvas.removeEventListener('wheel', onWheel)
   }
-  window.removeEventListener('mouseup', onMouseUp)
   window.removeEventListener('resize', onResize)
 })
 </script>
@@ -395,10 +421,24 @@ onUnmounted(() => {
 <template>
   <div class="scatter-root">
     <canvas ref="canvasEl" class="scatter-canvas" />
-    <div class="zoom-hud">
-      <button @click="zoomAround(W / 2, H / 2, 0.85)">−</button>
-      <button @click="resetView()">⊙</button>
-      <button @click="zoomAround(W / 2, H / 2, 1.18)">+</button>
+    <div class="zoom-hud" @pointerdown.stop @pointerup.stop @click.stop>
+      <button
+        @pointerdown.stop
+        @pointerup.stop
+        @click.stop="zoomAround(W / 2, H / 2, 0.85)"
+      >
+        −
+      </button>
+      <button @pointerdown.stop @pointerup.stop @click.stop="resetView()">
+        ⊙
+      </button>
+      <button
+        @pointerdown.stop
+        @pointerup.stop
+        @click.stop="zoomAround(W / 2, H / 2, 1.18)"
+      >
+        +
+      </button>
     </div>
   </div>
 </template>
@@ -414,6 +454,7 @@ onUnmounted(() => {
   display: block;
   cursor: grab;
   user-select: none;
+  touch-action: none;
 }
 .scatter-canvas:active {
   cursor: grabbing;

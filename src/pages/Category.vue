@@ -254,6 +254,7 @@ let zoom = DEFAULT_ZOOM
 let panX = 0,
   panY = 0
 let dragging = false
+let activePointerId = -1
 let lastMx = 0,
   lastMy = 0
 let didDrag = false
@@ -498,9 +499,9 @@ function handleClick(idx: number) {
   }
 }
 
-function onMouseMove(e: MouseEvent) {
+function onPointerMove(e: PointerEvent) {
   if (navigating) return
-  if (dragging) {
+  if (dragging && e.pointerId === activePointerId) {
     panX += e.clientX - lastMx
     panY += e.clientY - lastMy
     if (Math.abs(e.clientX - lastMx) > 6 || Math.abs(e.clientY - lastMy) > 6)
@@ -511,6 +512,9 @@ function onMouseMove(e: MouseEvent) {
     if (canvasEl.value) canvasEl.value.style.cursor = 'grabbing'
     return
   }
+
+  if (e.pointerType !== 'mouse') return
+
   hoveredIdx = hitTest(e.clientX, e.clientY)
   const n = nodes[hoveredIdx]
   if (canvasEl.value)
@@ -518,17 +522,27 @@ function onMouseMove(e: MouseEvent) {
       hoveredIdx >= 0 && n?.kind !== 'center' ? 'pointer' : 'grab'
 }
 
-function onMouseDown(e: MouseEvent) {
+function onPointerDown(e: PointerEvent) {
   if (navigating) return
+  if (e.pointerType === 'mouse' && e.button !== 0) return
   dragging = true
   didDrag = false
+  activePointerId = e.pointerId
   lastMx = e.clientX
   lastMy = e.clientY
+  hoveredIdx = -1
+  const canvas = canvasEl.value
+  if (canvas) {
+    canvas.setPointerCapture(e.pointerId)
+    canvas.style.cursor = 'grabbing'
+  }
 }
 
-function onMouseUp(e: MouseEvent) {
+function onPointerUp(e: PointerEvent) {
+  if (e.pointerId !== activePointerId) return
   if (navigating) {
     dragging = false
+    activePointerId = -1
     if (canvasEl.value) canvasEl.value.style.cursor = 'grab'
     return
   }
@@ -537,6 +551,14 @@ function onMouseUp(e: MouseEvent) {
     if (idx >= 0) handleClick(idx)
   }
   dragging = false
+  activePointerId = -1
+  if (canvasEl.value) canvasEl.value.style.cursor = 'grab'
+}
+
+function onPointerCancel(e: PointerEvent) {
+  if (e.pointerId !== activePointerId) return
+  dragging = false
+  activePointerId = -1
   if (canvasEl.value) canvasEl.value.style.cursor = 'grab'
 }
 
@@ -559,10 +581,12 @@ onMounted(() => {
   H = canvas.height = window.innerHeight
   rebuildNodes()
   resetView()
-  canvas.addEventListener('mousemove', onMouseMove)
-  canvas.addEventListener('mousedown', onMouseDown)
+  canvas.style.touchAction = 'none'
+  canvas.addEventListener('pointermove', onPointerMove)
+  canvas.addEventListener('pointerdown', onPointerDown)
+  canvas.addEventListener('pointerup', onPointerUp)
+  canvas.addEventListener('pointercancel', onPointerCancel)
   canvas.addEventListener('wheel', onWheel, { passive: false })
-  window.addEventListener('mouseup', onMouseUp)
   window.addEventListener('resize', onResize)
   rafId = requestAnimationFrame(draw)
 })
@@ -571,11 +595,12 @@ onUnmounted(() => {
   cancelAnimationFrame(rafId)
   const canvas = canvasEl.value
   if (canvas) {
-    canvas.removeEventListener('mousemove', onMouseMove)
-    canvas.removeEventListener('mousedown', onMouseDown)
+    canvas.removeEventListener('pointermove', onPointerMove)
+    canvas.removeEventListener('pointerdown', onPointerDown)
+    canvas.removeEventListener('pointerup', onPointerUp)
+    canvas.removeEventListener('pointercancel', onPointerCancel)
     canvas.removeEventListener('wheel', onWheel)
   }
-  window.removeEventListener('mouseup', onMouseUp)
   window.removeEventListener('resize', onResize)
 })
 </script>
@@ -590,10 +615,24 @@ onUnmounted(() => {
       }}
     </p>
     <canvas ref="canvasEl" class="scene-canvas" />
-    <div class="zoom-hud">
-      <button @click="zoomAround(W / 2, H / 2, 0.85)">−</button>
-      <button @click="resetView()">⊙</button>
-      <button @click="zoomAround(W / 2, H / 2, 1.18)">+</button>
+    <div class="zoom-hud" @pointerdown.stop @pointerup.stop @click.stop>
+      <button
+        @pointerdown.stop
+        @pointerup.stop
+        @click.stop="zoomAround(W / 2, H / 2, 0.85)"
+      >
+        −
+      </button>
+      <button @pointerdown.stop @pointerup.stop @click.stop="resetView()">
+        ⊙
+      </button>
+      <button
+        @pointerdown.stop
+        @pointerup.stop
+        @click.stop="zoomAround(W / 2, H / 2, 1.18)"
+      >
+        +
+      </button>
     </div>
     <p class="hint" v-if="viewState === 'keywords'">
       click a keyword to explore opinions
@@ -613,6 +652,7 @@ onUnmounted(() => {
   display: block;
   cursor: grab;
   user-select: none;
+  touch-action: none;
 }
 .scene-canvas:active {
   cursor: grabbing;
@@ -627,6 +667,12 @@ onUnmounted(() => {
   font-family: monospace;
   opacity: 0.7;
   pointer-events: none;
+}
+
+@media (max-width: 500px) {
+  .breadcrumb {
+    top: 64px;
+  }
 }
 .zoom-hud {
   position: absolute;

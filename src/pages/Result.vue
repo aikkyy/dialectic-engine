@@ -5,7 +5,7 @@
  * Right: antithesis
  */
 
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PixelCircle from '../components/PixelCircle.vue'
 
@@ -28,16 +28,42 @@ const leftText = computed(() => {
   return opinion.value
 })
 
+const isMobile = ref(false)
+
+function updateIsMobile() {
+  if (typeof window === 'undefined') return
+  isMobile.value = window.innerWidth <= 700
+}
+
+onMounted(() => {
+  updateIsMobile()
+  window.addEventListener('resize', updateIsMobile)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateIsMobile)
+})
+
+const mobileScale = computed(() => (isMobile.value ? 0.86 : 1))
+const mobilePixelSize = computed(() => (isMobile.value ? 3 : 4))
+const mobileGap = computed(() => (isMobile.value ? 2 : 3))
+
 function getCircleSize(text: string): number {
   // Slightly larger to accommodate combined text
   return Math.max(200, Math.min(360, 140 + text.length * 5))
 }
-const leftSize = computed(() => getCircleSize(leftText.value))
-const rightSize = computed(() => getCircleSize(antithesis.value))
+const leftSize = computed(() =>
+  Math.round(getCircleSize(leftText.value) * mobileScale.value),
+)
+const rightSize = computed(() =>
+  Math.round(getCircleSize(antithesis.value) * mobileScale.value),
+)
 
 function getFontSize(circleSize: number): number {
   // Sane range: 14px to 24px
-  return Math.max(14, Math.min(16, Math.floor(circleSize / 12)))
+  const minSize = isMobile.value ? 12 : 14
+  const maxSize = isMobile.value ? 15 : 16
+  return Math.max(minSize, Math.min(maxSize, Math.floor(circleSize / 12)))
 }
 
 function reset() {
@@ -59,8 +85,8 @@ function reset() {
         <PixelCircle
           :text="leftText"
           :size="leftSize"
-          :pixelSize="4"
-          :gap="3"
+          :pixelSize="mobilePixelSize"
+          :gap="mobileGap"
           :density="0.55"
           :fadeStrength="2.0"
           :randomness="0.7"
@@ -75,8 +101,8 @@ function reset() {
         <PixelCircle
           :text="antithesis"
           :size="rightSize"
-          :pixelSize="4"
-          :gap="3"
+          :pixelSize="mobilePixelSize"
+          :gap="mobileGap"
           :density="0.55"
           :fadeStrength="2.0"
           :randomness="0.7"
@@ -149,6 +175,13 @@ function reset() {
   font-size: 14px;
   pointer-events: none;
 }
+
+@media (max-width: 500px) {
+  .breadcrumb {
+    top: 64px;
+  }
+}
+
 .circles-container {
   display: flex;
   flex-direction: row;
@@ -165,8 +198,13 @@ function reset() {
 /* On very narrow screens, wrap with a small gap */
 @media (max-width: 700px) {
   .circles-container {
-    gap: 12px;
+    gap: 0px;
     flex-wrap: wrap;
+
+    /* first div child should have -5rem margin bottom */
+    :first-child {
+      margin-bottom: -1rem;
+    }
   }
 }
 .reload-btn {

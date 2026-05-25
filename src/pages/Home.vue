@@ -8,7 +8,7 @@
   </p>
 
   <p
-    class="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 text-base text-white"
+    class="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 text-base text-white bg-black"
   >
     thesis <span class="smallplus"></span>antithesis
     <span class="arrowright">more robust synthesis of the truth</span>

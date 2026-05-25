@@ -11,6 +11,10 @@ const isHome = computed(() => {
   return normalizedPath === '' || normalizedPath === '/'
 })
 
+const isArchives = computed(() =>
+  route.matched.some((record) => record.name === 'Archives'),
+)
+
 const goBack = () => {
   router.back()
 }
@@ -49,7 +53,7 @@ const goBack = () => {
         <path d="M11 6L5 12l6 6" />
       </svg>
     </button>
-    <Button class="absolute bottom-2 right-4 z-10" href="./archives">
+    <Button v-if="!isArchives" class="absolute bottom-2 right-4 z-10" href="./archives">
       Archives
     </Button>
     <router-view />

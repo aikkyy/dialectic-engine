@@ -7,7 +7,7 @@
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import PixelCircle from '../components/PixelCircle.vue'
+import SandCircle from '../components/Sandcircle.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -45,8 +45,6 @@ onUnmounted(() => {
 })
 
 const mobileScale = computed(() => (isMobile.value ? 0.86 : 1))
-const mobilePixelSize = computed(() => (isMobile.value ? 3 : 4))
-const mobileGap = computed(() => (isMobile.value ? 2 : 3))
 
 function getCircleSize(text: string): number {
   // Slightly larger to accommodate combined text
@@ -59,12 +57,33 @@ const rightSize = computed(() =>
   Math.round(getCircleSize(antithesis.value) * mobileScale.value),
 )
 
-function getFontSize(circleSize: number): number {
-  // Sane range: 14px to 24px
-  const minSize = isMobile.value ? 12 : 14
-  const maxSize = isMobile.value ? 15 : 16
-  return Math.max(minSize, Math.min(maxSize, Math.floor(circleSize / 12)))
+function wrapLines(text: string, maxChars = 20): string[] {
+  const words = text.split(' ').filter(Boolean)
+  const lines: string[] = []
+  let current = ''
+
+  for (const word of words) {
+    if (current && current.length + 1 + word.length > maxChars) {
+      lines.push(current)
+      current = word
+    } else {
+      current = current ? `${current} ${word}` : word
+    }
+  }
+
+  if (current) {
+    lines.push(current)
+  }
+
+  return lines
 }
+
+const leftLines = computed(() =>
+  wrapLines(leftText.value, isMobile.value ? 18 : 22),
+)
+const rightLines = computed(() =>
+  wrapLines(antithesis.value, isMobile.value ? 18 : 22),
+)
 
 function reset() {
   router.push({ name: 'Form' })
@@ -82,35 +101,19 @@ function reset() {
     <!-- Two touching circles -->
     <div class="circles-container">
       <div class="circle-wrapper">
-        <PixelCircle
-          :text="leftText"
+        <SandCircle
           :size="leftSize"
-          :pixelSize="mobilePixelSize"
-          :gap="mobileGap"
-          :density="0.55"
-          :fadeStrength="2.0"
-          :randomness="0.7"
-          :fontSize="getFontSize(leftSize)"
+          :lines="leftLines"
           color="#ffffff"
-          textColor="#ffffff"
-          :animationDensity="0.4"
-          :clickable="false"
+          bgColor="transparent"
         />
       </div>
       <div class="circle-wrapper">
-        <PixelCircle
-          :text="antithesis"
+        <SandCircle
           :size="rightSize"
-          :pixelSize="mobilePixelSize"
-          :gap="mobileGap"
-          :density="0.55"
-          :fadeStrength="2.0"
-          :randomness="0.7"
-          :fontSize="getFontSize(rightSize)"
+          :lines="rightLines"
           color="#ffffff"
-          textColor="#ffffff"
-          :animationDensity="0.4"
-          :clickable="false"
+          bgColor="transparent"
         />
       </div>
     </div>

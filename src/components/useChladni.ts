@@ -112,18 +112,21 @@ export function useChladni(
 
   const PI = Math.PI
   function chladniField(x: number, y: number, n: number, m: number): number {
-    // Aspect ratio correction: scales the coordinate space so circles don't stretch into ovals
-    const scaleX = Math.max(1, aspect)
-    const scaleY = Math.max(1, 1 / aspect)
+    // Map to [-1, 1] centered
+    const cx = (x - 0.5) * 2
+    const cy = (y - 0.5) * 2
 
-    // Keep coordinates centered on the screen
-    const ax = (x - 0.5) * scaleX + 0.5
-    const ay = (y - 0.5) * scaleY + 0.5
+    // Aspect-correct so the pattern is a true circle, not an ellipse
+    const ax = aspect >= 1 ? cx / aspect : cx
+    const ay = aspect >= 1 ? cy : cy * aspect
 
-    return (
-      Math.cos(n * PI * ax) * Math.cos(m * PI * ay) -
-      Math.cos(m * PI * ax) * Math.cos(n * PI * ay)
-    )
+    const r = Math.sqrt(ax * ax + ay * ay)
+    const theta = Math.atan2(ay, ax)
+
+    // Radial Chladni: Bessel-like standing wave on a circular membrane
+    // cos(n * PI * r) gives concentric rings
+    // cos(m * theta) gives radial spokes — keep m small for cleaner look
+    return Math.abs(Math.cos(n * PI * r) * Math.cos(m * theta))
   }
 
   function fieldAt(
@@ -325,22 +328,24 @@ export function useChladni(
 
     drawParticles(n1, m1, n2, m2, bl, thr)
 
-    const cx = 0.5,
-      cy = 0.5
-    const cbx = Math.round(cx * cw),
-      cby = Math.round(cy * ch)
-    const dotSize = 2
-    const white32 = (255 << 24) | (255 << 16) | (255 << 8) | 255
+    // // In the render function, update the center dot section:
+    // const cx = 0.5, // Keep this as 0.5 for exact center
+    //   cy = 0.5 // Keep this as 0.5 for exact center
+    // const cbx = Math.round(cx * cw),
+    //   cby = Math.round(cy * ch)
 
-    for (let r = 0; r < dotSize; r++) {
-      for (let th = 0; th < 2 * PI; th += 0.1 / r) {
-        const rx = cbx + Math.round(r * Math.cos(th))
-        const ry = cby + Math.round(r * Math.sin(th))
-        if (rx >= 0 && rx < cw && ry >= 0 && ry < ch) {
-          buf[ry * cw + rx] = white32
-        }
-      }
-    }
+    // const dotSize = 2
+    // const white32 = (255 << 24) | (255 << 16) | (255 << 8) | 255
+
+    // for (let r = 0; r < dotSize; r++) {
+    //   for (let th = 0; th < 2 * PI; th += 0.1 / r) {
+    //     const rx = cbx + Math.round(r * Math.cos(th))
+    //     const ry = cby + Math.round(r * Math.sin(th))
+    //     if (rx >= 0 && rx < cw && ry >= 0 && ry < ch) {
+    //       buf[ry * cw + rx] = white32
+    //     }
+    //   }
+    // }
 
     const ctx = canvasRef.value.getContext('2d')!
     ctx.putImageData(imgData, 0, 0)
@@ -416,8 +421,8 @@ export function useChladni(
       bl = 0.08 + amp * 0.35
       thr = 0.038 + amp * 0.12
     } else {
-      n1 = baseN1
-      m1 = baseM1
+      n1 = baseN1 // controls ring count
+      m1 = baseM1 // controls spoke count — keep this 1–4 for clean circles
       n2 = baseN2
       m2 = baseM2
       bl = 0.0
@@ -448,10 +453,10 @@ export function useChladni(
   function onPointerClick(x: number, y: number) {
     const nx = Math.max(0, Math.min(1, x / window.innerWidth))
     const ny = Math.max(0, Math.min(1, y / window.innerHeight))
-    baseN1 = 1 + Math.floor(nx * 9)
-    baseM1 = 1 + Math.floor(ny * 9)
-    baseN2 = Math.max(1, baseN1 + 3)
-    baseM2 = Math.max(1, baseM1 + 2)
+    baseN1 = 1 + Math.floor(nx * 7) // 1–8 rings
+    baseM1 = 1 + Math.floor(ny * 3) // 1–4 spokes max — keeps it round
+    baseN2 = Math.max(1, baseN1 + 2)
+    baseM2 = Math.max(1, baseM1 + 1)
     flashIntensity = 0.8
     scatterParticles(nx, ny)
     if (AUDIO_SRC && !audioReady && !audioFailed) initAudio()

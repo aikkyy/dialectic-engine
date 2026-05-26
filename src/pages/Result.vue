@@ -29,6 +29,7 @@ const leftText = computed(() => {
 })
 
 const isMobile = ref(false)
+const contentVisible = ref(false)
 
 function updateIsMobile() {
   if (typeof window === 'undefined') return
@@ -38,6 +39,9 @@ function updateIsMobile() {
 onMounted(() => {
   updateIsMobile()
   window.addEventListener('resize', updateIsMobile)
+  requestAnimationFrame(() => {
+    contentVisible.value = true
+  })
 })
 
 onUnmounted(() => {
@@ -99,41 +103,43 @@ function reset() {
     <!-- <button class="back-btn" @click="goBack" title="Go back">←</button> -->
 
     <!-- Two touching circles -->
-    <div class="circles-container">
-      <div class="circle-wrapper">
-        <SandCircle
-          :size="leftSize"
-          :lines="leftLines"
-          color="#ffffff"
-          bgColor="transparent"
-        />
+    <div :class="['result-content', { 'is-visible': contentVisible }]">
+      <div class="circles-container">
+        <div class="circle-wrapper">
+          <SandCircle
+            :size="leftSize"
+            :lines="leftLines"
+            color="#ffffff"
+            bgColor="transparent"
+          />
+        </div>
+        <div class="circle-wrapper">
+          <SandCircle
+            :size="rightSize"
+            :lines="rightLines"
+            color="#ffffff"
+            bgColor="transparent"
+          />
+        </div>
       </div>
-      <div class="circle-wrapper">
-        <SandCircle
-          :size="rightSize"
-          :lines="rightLines"
-          color="#ffffff"
-          bgColor="transparent"
-        />
-      </div>
-    </div>
 
-    <!-- Refresh / reload button (optional, keeps your circular arrow) -->
-    <button class="reload-btn" @click="reset" title="Restart">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        class="w-6 h-6"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path d="M21 12a9 9 0 1 1-3.2-6.9" />
-        <polyline points="21 3 21 9 15 9" />
-      </svg>
-    </button>
+      <!-- Refresh / reload button (optional, keeps your circular arrow) -->
+      <button class="reload-btn" @click="reset" title="Restart">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="w-6 h-6"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M21 12a9 9 0 1 1-3.2-6.9" />
+          <polyline points="21 3 21 9 15 9" />
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -147,6 +153,17 @@ function reset() {
   justify-content: center;
   background: #0a0a0f;
   overflow: hidden;
+}
+.result-content {
+  opacity: 0;
+  transform: translateY(18px) scale(0.98);
+  transition:
+    opacity 0.52s ease,
+    transform 0.52s ease;
+}
+.result-content.is-visible {
+  opacity: 1;
+  transform: none;
 }
 .back-btn {
   position: absolute;

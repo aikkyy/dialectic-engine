@@ -148,6 +148,55 @@ function onGlobalPointerUp(e: PointerEvent) {
 
 // ── Selection ─────────────────────────────────────────────────────────────────
 const navigating = ref(false)
+const transitioningToResult = ref(false)
+const explosionParticles = ref<
+  Array<{ id: number; dx: number; dy: number; size: number; delay: number }>
+>([])
+
+function createExplosionParticles(count = 28) {
+  return Array.from({ length: count }, (_, index) => {
+    const angle = Math.random() * Math.PI * 2
+    const distance = 140 + Math.random() * 100
+    return {
+      id: index,
+      dx: Math.cos(angle) * distance,
+      dy: Math.sin(angle) * distance,
+      size: 2 + Math.random() * 5,
+      delay: Math.random() * 120,
+    }
+  })
+}
+
+function startResultsTransition(op: { opinion: string; antiThesis?: string }) {
+  if (transitioningToResult.value) return
+
+  explosionParticles.value = createExplosionParticles(32)
+  transitioningToResult.value = true
+
+  saveSelectionArchive({
+    category: category.value,
+    keyword: selectedKeyword.value!.keyword,
+    opinion: op.opinion,
+    antithesis: op.antiThesis || '',
+  })
+
+  navigating.value = true
+  setTimeout(() => {
+    router
+      .push({
+        name: 'Result',
+        query: {
+          opinion: op.opinion,
+          antithesis: op.antiThesis || '',
+          category: category.value,
+          keyword: selectedKeyword.value!.keyword,
+        },
+      })
+      .finally(() => {
+        navigating.value = false
+      })
+  }, 520)
+}
 
 function selectItem(id: string) {
   if (navigating.value) return
@@ -166,27 +215,7 @@ function selectItem(id: string) {
     const op = selectedKeyword.value.data[idx]
     if (!op) return
 
-    saveSelectionArchive({
-      category: category.value,
-      keyword: selectedKeyword.value.keyword,
-      opinion: op.opinion,
-      antithesis: op.antiThesis || '',
-    })
-
-    navigating.value = true
-    router
-      .push({
-        name: 'Result',
-        query: {
-          opinion: op.opinion,
-          antithesis: op.antiThesis || '',
-          category: category.value,
-          keyword: selectedKeyword.value.keyword,
-        },
-      })
-      .finally(() => {
-        navigating.value = false
-      })
+    startResultsTransition(op)
   }
 }
 
@@ -235,7 +264,11 @@ onUnmounted(() => {
     </button>
 
     <!-- Scene -->
-    <div class="scene" ref="wrapperEl">
+    <div
+      class="scene"
+      ref="wrapperEl"
+      :class="{ 'is-transitioning': transitioningToResult }"
+    >
       <!-- Sand circle center -->
       <div class="circle-wrap" :class="{ 'drop-active': dragOver }">
         <SandCircle
@@ -245,6 +278,24 @@ onUnmounted(() => {
           :particleCount="50000"
         />
         <div class="circle-ring" :class="{ 'ring-active': dragOver }" />
+      </div>
+
+      <div
+        v-if="transitioningToResult"
+        class="explode-overlay"
+        aria-hidden="true"
+      >
+        <span
+          v-for="particle in explosionParticles"
+          :key="particle.id"
+          class="explode-particle"
+          :style="{
+            '--dx': `${particle.dx}px`,
+            '--dy': `${particle.dy}px`,
+            '--size': `${particle.size}px`,
+            '--delay': `${particle.delay}ms`,
+          }"
+        />
       </div>
 
       <!-- Text items orbiting the circle -->
@@ -356,6 +407,57 @@ onUnmounted(() => {
   width: min(90vw, 680px);
   height: min(90vw, 680px);
   max-height: 80vh;
+}
+
+.scene.is-transitioning .circle-wrap {
+  transform: translate(-50%, -50%) scale(0.94);
+  opacity: 0.65;
+}
+
+.scene.is-transitioning .orbit-item {
+  opacity: 0.2;
+}
+
+.scene.is-transitioning .circle-ring {
+  opacity: 0.1;
+}
+
+.explode-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.explode-particle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.2);
+  animation: explode 0.62s ease-out forwards;
+  animation-delay: var(--delay);
+}
+
+@keyframes explode {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.25);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)))
+      scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)))
+      scale(0.8);
+  }
 }
 
 /* ── Circle ── */

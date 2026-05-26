@@ -53,9 +53,36 @@ const goBack = () => {
         <path d="M11 6L5 12l6 6" />
       </svg>
     </button>
-    <Button v-if="!isArchives" class="absolute bottom-2 right-4 z-10" href="./archives">
+    <Button
+      v-if="!isArchives"
+      class="absolute bottom-2 right-4 z-10"
+      href="./archives"
+    >
       Archives
     </Button>
-    <router-view />
+    <router-view v-slot="{ Component }">
+      <Transition name="page" mode="out-in">
+        <component :is="Component" />
+      </Transition>
+    </router-view>
   </main>
 </template>
+
+<style>
+.page-enter-active,
+.page-leave-active {
+  transition:
+    opacity 0.32s ease,
+    transform 0.32s ease;
+}
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(18px) scale(0.98);
+}
+.page-enter-to,
+.page-leave-from {
+  opacity: 1;
+  transform: none;
+}
+</style>

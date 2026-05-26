@@ -376,7 +376,7 @@ onUnmounted(() => {
   position: absolute;
   inset: -8px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  /* border: 1px solid rgba(255, 255, 255, 0.07); */
   pointer-events: none;
   transition:
     border-color 0.25s,

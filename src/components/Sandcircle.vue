@@ -1,56 +1,47 @@
 <script setup lang="ts">
 /**
  * SandCircle.vue
- * A reusable canvas component that renders a circular Chladni sand animation.
- * The sand particles are confined to a circle and form animated nodal patterns.
+ * Elegant circular waveform with floating sand particles around the border.
  */
 
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 
 interface Props {
-  size?: number
+  /** Controls circle size - set to 'full' for parent fit, or specific pixel value */
+  size?: number | 'full'
   color?: string
   bgColor?: string
-  particleCount?: number
-  /** Lines of text to render inside the circle */
   lines?: string[]
-  /** Highlight color for selected text */
-  accentColor?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  size: 260,
+  size: 'full',
   color: '#ffffff',
   bgColor: 'transparent',
-  particleCount: 55000,
   lines: () => [],
-  accentColor: '#a0c4ff',
 })
 
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 let rafId = 0
-let t0 = 0
-
-// Particle state
-let px: Float32Array
-let py: Float32Array
-let pvx: Float32Array
-let pvy: Float32Array
+let time = 0
 
 // Canvas internals
-let csize = 0
-let buf: Uint32Array | null = null
-let imgData: ImageData | null = null
-let lineRGB: [number, number, number] = [255, 255, 255]
+let canvasWidth = 0
+let canvasHeight = 0
+let csize = 0 // Min dimension for circle
+let ctx: CanvasRenderingContext2D | null = null
 
-// Animation state — slowly drifts between modes for organic feel
-let modeN = 2.5
-let modeM = 3.5
-let targetN = 2.5
-let targetM = 3.5
-let nextModeChange = 3000
+// Particle system for floating sand
+interface SandParticle {
+  angle: number
+  radius: number
+  velocity: number
+  offset: number
+}
 
-// Inline xorshift PRNG
+let sandParticles: SandParticle[] = []
+
+// Simple PRNG
 let _rng = 0xdeadbeef
 const rand = () => {
   _rng ^= _rng << 13
@@ -59,276 +50,228 @@ const rand = () => {
   return (_rng >>> 0) / 4294967296
 }
 
-function parseColor(css: string): [number, number, number] {
-  const c = document.createElement('canvas')
-  c.width = c.height = 1
-  const cx = c.getContext('2d')!
-  cx.fillStyle = css
-  cx.fillRect(0, 0, 1, 1)
-  const d = cx.getImageData(0, 0, 1, 1).data
-  return [d[0], d[1], d[2]]
-}
+// Waveform parameters - INCREASED for bigger circle
+const WAVE_BASE_RADIUS = 0.48 // Increased from 0.42 (base circle radius)
+const WAVE_AMPLITUDE = 0.08 // Increased from 0.06 (how far spikes extend)
+const SPIKE_COUNT = 140 // Increased from 120 for smoother circle
 
-// Single border - only outer boundary at radius 0.47
-const CIRCLE_RADIUS = 0.47
+function initSandParticles() {
+  const particleCount = 1000 // Increased from 800 for better coverage
+  sandParticles = []
 
-function initParticles() {
-  const N = props.particleCount
-  px = new Float32Array(N)
-  py = new Float32Array(N)
-  pvx = new Float32Array(N)
-  pvy = new Float32Array(N)
-  for (let i = 0; i < N; i++) {
-    // Spawn uniformly inside the circle
-    const angle = rand() * Math.PI * 2
-    const r = rand() * CIRCLE_RADIUS
-    px[i] = 0.5 + Math.cos(angle) * r
-    py[i] = 0.5 + Math.sin(angle) * r
-    pvx[i] = 0
-    pvy[i] = 0
+  for (let i = 0; i < particleCount; i++) {
+    sandParticles.push({
+      angle: rand() * Math.PI * 2,
+      radius: WAVE_BASE_RADIUS + (rand() - 0.5) * 0.15, // Increased spread
+      velocity: (rand() - 0.5) * 0.003,
+      offset: rand() * Math.PI * 2,
+    })
   }
 }
 
-const PI = Math.PI
+function updateSandParticles() {
+  for (let p of sandParticles) {
+    // Gentle wandering
+    p.velocity += (rand() - 0.5) * 0.0003
+    p.velocity = Math.max(-0.008, Math.min(0.008, p.velocity))
+    p.radius += p.velocity
 
-function chladniField(x: number, y: number, n: number, m: number): number {
-  const dx = x - 0.5
-  const dy = y - 0.5
-  const r = Math.sqrt(dx * dx + dy * dy)
-  const theta = Math.atan2(dy, dx)
-  // Remap r so 0 = center, 1 = outer edge
-  const t = r / CIRCLE_RADIUS
-  return Math.abs(Math.cos(n * PI * t) * Math.cos(m * theta))
-}
+    // Soft boundary - pull back toward base radius
+    const targetRadius = WAVE_BASE_RADIUS
+    const pullStrength = 0.02
+    p.radius += (targetRadius - p.radius) * pullStrength
 
-function fieldAt(x: number, y: number, n: number, m: number): number {
-  return chladniField(x, y, n, m)
-}
-
-function stepParticles(n: number, m: number) {
-  const PULL = 0.0007
-  const DAMPING = 0.8
-  const JITTER = 0.00055
-  const EPS = 0.004
-  const N = props.particleCount
-
-  for (let i = 0; i < N; i++) {
-    let x = px[i]
-    let y = py[i]
-
-    const fc = fieldAt(x, y, n, m)
-    const gx = (fieldAt(x + EPS, y, n, m) - fc) / EPS
-    const gy = (fieldAt(x, y + EPS, n, m) - fc) / EPS
-
-    pvx[i] += -gx * PULL + (rand() - 0.5) * JITTER
-    pvy[i] += -gy * PULL + (rand() - 0.5) * JITTER
-    pvx[i] *= DAMPING
-    pvy[i] *= DAMPING
-
-    x += pvx[i]
-    y += pvy[i]
-
-    // Reflect off outer wall only
-    const dx = x - 0.5
-    const dy = y - 0.5
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    const nx = dx / (dist + 1e-9)
-    const ny = dy / (dist + 1e-9)
-
-    if (dist > CIRCLE_RADIUS) {
-      // Hit outer wall — reflect inward
-      const dot = pvx[i] * nx + pvy[i] * ny
-      pvx[i] -= 2 * dot * nx
-      pvy[i] -= 2 * dot * ny
-      x = 0.5 + nx * (CIRCLE_RADIUS - 0.001)
-      y = 0.5 + ny * (CIRCLE_RADIUS - 0.001)
-    }
-
-    px[i] = x
-    py[i] = y
+    // Add subtle angle drift
+    p.angle += (rand() - 0.5) * 0.01
   }
 }
 
-function drawParticles(n: number, m: number) {
-  if (!buf || !imgData) return
+function getWaveformRadius(angle: number, timeMs: number): number {
+  // Multiple frequencies for organic spikes
+  const waveSpeed = timeMs * 0.002
+  const waveSpeed2 = timeMs * 0.0035
+  const waveSpeed3 = timeMs * 0.0012
 
-  const lr = lineRGB[0]
-  const lg = lineRGB[1]
-  const lb = lineRGB[2]
-  const thr = 0.05
-  const band = thr * 6
-  const N = props.particleCount
+  // Spike patterns - amplified for bigger circle
+  const spike1 = Math.sin(angle * 8 + waveSpeed) * 0.03 // Increased from 0.025
+  const spike2 = Math.sin(angle * 16 - waveSpeed2) * 0.02 // Increased from 0.015
+  const spike3 = Math.sin(angle * 32 + waveSpeed3) * 0.01 // Increased from 0.008
 
-  for (let i = 0; i < N; i++) {
-    const x = px[i]
-    const y = py[i]
+  // Subtle overall pulse
+  const pulse = Math.sin(timeMs * 0.001) * 0.008 // Increased from 0.005
 
-    // Only draw inside the circle
-    const dx = x - 0.5
-    const dy = y - 0.5
-    const r = Math.sqrt(dx * dx + dy * dy)
-    if (r > CIRCLE_RADIUS) continue
+  // Random noise per frame for sand-like texture
+  const noise = (rand() - 0.5) * 0.01 // Increased from 0.008
 
-    const fc = fieldAt(x, y, n, m)
-    const proximity = Math.max(0, 1 - fc / band)
-    if (proximity <= 0) continue
+  let radius =
+    WAVE_BASE_RADIUS + WAVE_AMPLITUDE + spike1 + spike2 + spike3 + pulse + noise
 
-    const a = Math.min(1, proximity * 0.95)
-    if (a < 0.02) continue
-
-    const bx = Math.round(x * csize)
-    const by = Math.round(y * csize)
-    if (bx < 0 || bx >= csize || by < 0 || by >= csize) continue
-
-    const idx = by * csize + bx
-    const existing = buf[idx]
-    const er = existing & 0xff
-    const eg = (existing >> 8) & 0xff
-    const eb = (existing >> 16) & 0xff
-
-    const jitter = (rand() - 0.5) * 20
-    const gr = Math.max(0, Math.min(255, lr + jitter))
-    const gg = Math.max(0, Math.min(255, lg + jitter))
-    const gb = Math.max(0, Math.min(255, lb + jitter))
-
-    const nr = Math.round(er + (gr - er) * a)
-    const ng = Math.round(eg + (gg - eg) * a)
-    const nb = Math.round(eb + (gb - eb) * a)
-
-    buf[idx] = (255 << 24) | (nb << 16) | (ng << 8) | nr
-  }
-}
-
-function drawCircleMask() {
-  if (!buf) return
-  const cx = csize / 2
-  const cy = csize / 2
-  const outerR2 = csize * CIRCLE_RADIUS * (csize * CIRCLE_RADIUS)
-
-  for (let y = 0; y < csize; y++) {
-    for (let x = 0; x < csize; x++) {
-      const dx = x - cx
-      const dy = y - cy
-      const d2 = dx * dx + dy * dy
-      // Clear anything outside the circle edge
-      if (d2 > outerR2) {
-        buf[y * csize + x] = 0
-      }
-    }
-  }
-}
-
-function drawTextOverlay() {
-  const canvas = canvasEl.value
-  if (!canvas || !props.lines.length) return
-  const ctx = canvas.getContext('2d')!
-
-  const dpr = window.devicePixelRatio || 1
-  const r = (csize / 2) * 0.75 // text area radius in canvas pixels
-  const cx = csize / 2
-  const cy = csize / 2
-
-  ctx.save()
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-
-  const lineCount = props.lines.length
-  const fontSize = Math.max(
-    11,
-    Math.min(18, ((r * 1.1) / (lineCount + 1) / dpr) * 1.6),
+  // Clamp to keep within bounds - adjusted for larger circle
+  return Math.max(
+    WAVE_BASE_RADIUS - 0.06,
+    Math.min(WAVE_BASE_RADIUS + 0.15, radius),
   )
-  const lineH = fontSize * 1.55
-  const totalH = (lineCount - 1) * lineH
-  const startY = cy - totalH / 2
-
-  props.lines.forEach((line, i) => {
-    const isLast = i === lineCount - 1
-    ctx.font = `${isLast ? '500' : '300'} ${Math.round(fontSize * dpr)}px "Gap Sans", monospace`
-    ctx.shadowColor = 'rgba(0,0,0,0.95)'
-    ctx.shadowBlur = 10 * dpr
-
-    // Dim earlier lines, brighten current
-    if (isLast) {
-      ctx.fillStyle = '#ffffff'
-    } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.45)'
-    }
-
-    ctx.fillText(line, cx, startY + i * lineH)
-  })
-
-  ctx.shadowBlur = 0
-  ctx.restore()
 }
 
-function render(n: number, m: number) {
-  if (!buf || !imgData || !canvasEl.value) return
+function draw() {
+  if (!ctx || !canvasEl.value) return
 
-  // Clear to transparent
-  buf.fill(0)
-  drawParticles(n, m)
-  drawCircleMask()
+  const centerX = canvasWidth / 2
+  const centerY = canvasHeight / 2
+  const maxRadius = Math.min(canvasWidth, canvasHeight) - 50
 
-  const ctx = canvasEl.value.getContext('2d')!
-  ctx.clearRect(0, 0, csize, csize)
-  ctx.putImageData(imgData, 0, 0)
-  drawTextOverlay()
-}
+  // Clear canvas (make background transparent)
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight)
 
-function loop(now: number) {
-  rafId = requestAnimationFrame(loop)
-  if (!t0) t0 = now
-  const elapsed = now - t0
+  // Draw the circular waveform (outer ring of sand)
+  const angleStep = (Math.PI * 2) / SPIKE_COUNT
 
-  // Slowly drift to new modes
-  if (elapsed > nextModeChange) {
-    targetN = 1.5 + Math.floor(rand() * 5)
-    targetM = 1 + Math.floor(rand() * 4)
-    nextModeChange = elapsed + 4000 + rand() * 4000
+  // First pass: draw sand particles on the waveform
+  for (let i = 0; i < SPIKE_COUNT; i++) {
+    const angle = i * angleStep
+    const radius = getWaveformRadius(angle, time)
+
+    const x = centerX + Math.cos(angle) * radius * maxRadius
+    const y = centerY + Math.sin(angle) * radius * maxRadius
+
+    // Variable grain size for texture - slightly larger for bigger circle
+    const grainSize = Math.max(2, Math.floor(maxRadius / 100) + rand() * 0.8)
+    ctx.fillStyle = props.color
+
+    // Add slight opacity variation
+    ctx.globalAlpha = 0.7 + rand() * 0.3
+    ctx.fillRect(x - grainSize / 2, y - grainSize / 2, grainSize, grainSize)
   }
 
-  modeN += (targetN - modeN) * 0.003
-  modeM += (targetM - modeM) * 0.003
+  // Draw floating sand particles between waveform and outer edge
+  for (let p of sandParticles) {
+    // Only draw particles that are outside the waveform but inside the outer boundary
+    const waveformRadius = getWaveformRadius(p.angle, time)
 
-  stepParticles(modeN, modeM)
-  render(modeN, modeM)
+    // Draw particle if it's near the waveform or outside it
+    if (p.radius >= waveformRadius - 0.04) {
+      const x = centerX + Math.cos(p.angle) * p.radius * maxRadius
+      const y = centerY + Math.sin(p.angle) * p.radius * maxRadius
+
+      const grainSize = Math.max(1.5, Math.floor(maxRadius / 130))
+      ctx.fillStyle = props.color
+      ctx.globalAlpha = 0.5 + (p.radius - waveformRadius) * 1.5
+      ctx.fillRect(x - grainSize / 2, y - grainSize / 2, grainSize, grainSize)
+    }
+  }
+
+  // Draw some scattered sand dust just outside the waveform
+  const dustCount = 600 // Increased from 400
+  for (let i = 0; i < dustCount; i++) {
+    const angle = rand() * Math.PI * 2
+    const waveformRadius = getWaveformRadius(angle, time)
+    const dustOffset = rand() * 0.05 // Increased spread
+    const dustRadius = waveformRadius + dustOffset
+
+    if (dustOffset < 0.04) {
+      const x = centerX + Math.cos(angle) * dustRadius * maxRadius
+      const y = centerY + Math.sin(angle) * dustRadius * maxRadius
+
+      const grainSize = Math.max(1, Math.floor(maxRadius / 180))
+      ctx.fillStyle = props.color
+      ctx.globalAlpha = 0.3 + rand() * 0.4
+      ctx.fillRect(x - grainSize / 2, y - grainSize / 2, grainSize, grainSize)
+    }
+  }
+
+  // Reset alpha
+  ctx.globalAlpha = 1
+
+  // Draw text in the empty center if provided
+  if (props.lines.length) {
+    ctx.font = `${Math.max(14, Math.min(28, csize / 14))}px monospace` // Larger text
+    ctx.fillStyle = props.color
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.shadowBlur = 10
+    ctx.shadowColor = 'rgba(0,0,0,0.3)'
+
+    const lineHeight = csize / 12
+    const startY = centerY - ((props.lines.length - 1) * lineHeight) / 2
+
+    props.lines.forEach((line, i) => {
+      ctx?.fillText(line, centerX, startY + i * lineHeight)
+    })
+
+    ctx.shadowBlur = 0
+  }
 }
 
-function setup() {
+function animate() {
+  time += 16 // ~60fps
+  updateSandParticles()
+  draw()
+  rafId = requestAnimationFrame(animate)
+}
+
+function resizeCanvas() {
   const canvas = canvasEl.value
   if (!canvas) return
 
+  const parent = canvas.parentElement
+  if (!parent) return
+
+  if (props.size === 'full') {
+    // Fit parent exactly
+    canvasWidth = parent.clientWidth
+    canvasHeight = parent.clientHeight
+  } else if (typeof props.size === 'number') {
+    canvasWidth = props.size
+    canvasHeight = props.size
+  }
+
+  csize = Math.min(canvasWidth, canvasHeight)
+
+  // Set canvas resolution with DPR for sharpness
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
-  csize = Math.round(props.size * dpr)
-  canvas.width = csize
-  canvas.height = csize
-  canvas.style.width = `${props.size}px`
-  canvas.style.height = `${props.size}px`
+  canvas.width = canvasWidth * dpr
+  canvas.height = canvasHeight * dpr
+  canvas.style.width = `${canvasWidth}px`
+  canvas.style.height = `${canvasHeight}px`
 
-  lineRGB = parseColor(props.color)
-  imgData = new ImageData(csize, csize)
-  buf = new Uint32Array(imgData.data.buffer)
+  // Scale context
+  ctx = canvas.getContext('2d')!
+  ctx.scale(dpr, dpr)
+}
 
-  initParticles()
+function setup() {
+  resizeCanvas()
+  initSandParticles()
+}
+
+// Watch for size changes
+watch(
+  () => props.size,
+  () => {
+    setup()
+  },
+)
+
+// Handle window resize when using 'full' mode
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', () => {
+    if (props.size === 'full') {
+      resizeCanvas()
+    }
+  })
 }
 
 onMounted(() => {
   setup()
-  rafId = requestAnimationFrame(loop)
+  animate()
 })
 
 onUnmounted(() => {
   cancelAnimationFrame(rafId)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', resizeCanvas)
+  }
 })
-
-watch(
-  () => props.size,
-  () => {
-    cancelAnimationFrame(rafId)
-    setup()
-    rafId = requestAnimationFrame(loop)
-  },
-)
 </script>
 
 <template>
@@ -338,8 +281,8 @@ watch(
 <style scoped>
 .sand-circle {
   display: block;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
-  /* Single border around the circle */
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
 }
 </style>

@@ -122,7 +122,7 @@ onUnmounted(() => {
 .scroll-stage {
   position: relative;
   width: 100%;
-  height: 100%;
+  height: 100vh; /* Force viewport height instead of relying on parent */
   overflow-y: scroll;
   overflow-x: hidden;
   scroll-timeline: --stage block;

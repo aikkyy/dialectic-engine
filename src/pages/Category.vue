@@ -1,16 +1,20 @@
 <script setup lang="ts">
 /**
- * Category.vue
- * – Satellite nodes have proper collision radii derived from text length
- * – Spiral placement (same algorithm as CategoryScatter) guarantees no overlaps
- * – Drag-after-click bug fixed, navigation via query params
+ * Category.vue — Redesigned
+ *
+ * Stage 1: Pick a keyword  → drag or click into center SandCircle
+ * Stage 2: Pick an opinion → drag or click into center SandCircle → navigate
+ *
+ * Items orbit the circle at an adaptive radius.
+ * The SandCircle builds up the sentence as selections are made.
  */
 
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { engineOpinions } from '../data/engineOpinions'
 import type { EngineOpinionType } from '../data/engineOpinions'
 import { saveSelectionArchive } from '../utils/selectionArchives'
+import SandCircle from '../components/Sandcircle.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,693 +26,448 @@ const categoryKeywords = computed<EngineOpinionType[]>(() =>
   ),
 )
 
-function hash(a: number, b = 0): number {
-  let h = a * 374761393 + b * 1234567891
-  h = ((h ^ (h >>> 13)) * 1274126177) | 0
-  h ^= h >>> 16
-  return (h >>> 0) / 0xffffffff
-}
+// ── Stage ─────────────────────────────────────────────────────────────────────
+type Stage = 'keyword' | 'opinion'
+const stage = ref<Stage>('keyword')
+const selectedKeyword = ref<EngineOpinionType | null>(null)
 
-type NodeKind = 'center' | 'keyword' | 'opinion'
+// Lines shown inside SandCircle — builds up across stages
+const sentenceLines = computed<string[]>(() => {
+  if (stage.value === 'keyword') return ['I believe that...']
+  if (selectedKeyword.value) {
+    return [
+      'I believe that',
+      selectedKeyword.value.keyword.toLowerCase(),
+      '...',
+    ]
+  }
+  return []
+})
 
-interface CanvasNode {
-  kind: NodeKind
+// ── Items ─────────────────────────────────────────────────────────────────────
+interface DisplayItem {
+  id: string
   label: string
-  x: number
-  y: number
-  /** collision + draw radius (world-space) */
-  r: number
-  animPhase: number
-  seed: number
-  keyword?: string
-  opinionIdx?: number
-  keywordEntry?: EngineOpinionType
-  opinionText?: string
-  antithesisText?: string
+  angle: number // radians, for ring placement
+  radius: number // px from center
 }
 
-type ViewState = 'keywords' | 'opinions'
-const viewState = ref<ViewState>('keywords')
-const activeKeywordEntry = ref<EngineOpinionType | null>(null)
+const CIRCLE_SIZE = 240
+const SCENE_SIZE = 680
 
-// ── Radius estimation from text ───────────────────────────────────────────────
-// Approximates the bounding circle of wrapped text without a real canvas context.
-// charW and lineH are tuned to the monospace font at the draw sizes we use.
-
-const CHARS_PER_LINE_KW = 14 // keyword font ~14px, maxW 200px → ~14 chars/line
-const CHARS_PER_LINE_OP = 12 // opinion font ~13px
-const CHAR_W_KW = 8.4 // px per char at keyword font size
-const CHAR_W_OP = 7.7
-const LINE_H_KW = 14 * 1.35
-const LINE_H_OP = 13 * 1.35
-const MAX_LINES = 3
-
-function textRadius(label: string, kind: 'keyword' | 'opinion'): number {
-  const charsPerLine =
-    kind === 'keyword' ? CHARS_PER_LINE_KW : CHARS_PER_LINE_OP
-  const charW = kind === 'keyword' ? CHAR_W_KW : CHAR_W_OP
-  const lineH = kind === 'keyword' ? LINE_H_KW : LINE_H_OP
-
-  const words = label.split(' ')
-  const lines: string[] = []
-  let current = ''
-  for (const word of words) {
-    const test = current ? `${current} ${word}` : word
-    if (test.length > charsPerLine && current) {
-      lines.push(current)
-      current = word
-    } else current = test
-  }
-  if (current) lines.push(current)
-  const displayLines = lines.slice(0, MAX_LINES)
-
-  const textW = Math.max(...displayLines.map((l) => l.length * charW))
-  const textH = displayLines.length * lineH
-  // Circle that encloses the text rectangle, plus padding
-  return Math.ceil(Math.hypot(textW / 2, textH / 2)) + 18
+// Radius adapts to count — more items need a wider orbit
+function orbitRadius(count: number): number {
+  const base = CIRCLE_SIZE / 2 + 80
+  const perItemPush = Math.max(0, (count - 6) * 5)
+  return Math.min(base + perItemPush, SCENE_SIZE / 2 - 70)
 }
 
-// ── Collision-free spiral placer ──────────────────────────────────────────────
-
-const MARGIN = 36 // min gap between node boundaries
-const MAX_RADIUS = 1200
-const STEP = 4 // radius increment per spiral step
-
-function placeSatellites(
-  items: Array<{
-    label: string
-    kind: 'keyword' | 'opinion'
-    seed: number
-    [k: string]: unknown
-  }>,
-  centerR: number,
-): Array<{ x: number; y: number; r: number }> {
-  const placed: Array<{ x: number; y: number; r: number }> = []
-
-  for (let idx = 0; idx < items.length; idx++) {
-    const item = items[idx]
-    const r = textRadius(item.label, item.kind as 'keyword' | 'opinion')
-    // golden-angle spiral starting just outside the center circle
-    const minDist = centerR + r + MARGIN
-    let angle = idx * Math.PI * 2 * (Math.sqrt(5) - 1)
-    let tries = 0
-    let ok = false
-
-    while (!ok && tries < 2000) {
-      const radius = Math.min(MAX_RADIUS, minDist + tries * STEP)
-      const x = Math.cos(angle) * radius
-      const y = Math.sin(angle) * radius
-      angle += Math.PI * 2 * (Math.sqrt(5) - 1)
-
-      const clearOfCenter = Math.hypot(x, y) >= minDist
-
-      let clearOfPeers = true
-      for (const p of placed) {
-        if (Math.hypot(x - p.x, y - p.y) < r + p.r + MARGIN) {
-          clearOfPeers = false
-          break
-        }
-      }
-
-      if (clearOfCenter && clearOfPeers) {
-        placed.push({ x, y, r })
-        ok = true
-      }
-      tries++
-    }
-
-    if (!ok) {
-      // hard fallback: park it far out
-      const a = (idx / items.length) * Math.PI * 2
-      placed.push({
-        x: Math.cos(a) * MAX_RADIUS,
-        y: Math.sin(a) * MAX_RADIUS,
-        r,
-      })
-    }
+const displayItems = computed<DisplayItem[]>(() => {
+  let raw: string[]
+  if (stage.value === 'keyword') {
+    raw = categoryKeywords.value.map((e) => e.keyword)
+  } else {
+    raw = (selectedKeyword.value?.data ?? []).map((op) => op.opinion)
   }
 
-  return placed
-}
+  const count = raw.length
+  const r = orbitRadius(count)
 
-// ── Node builders ─────────────────────────────────────────────────────────────
-
-const CENTER_R = 70
-
-function buildKeywordNodes(entries: EngineOpinionType[]): CanvasNode[] {
-  const nodes: CanvasNode[] = []
-  nodes.push({
-    kind: 'center',
-    label: 'I believe that',
-    x: 0,
-    y: 0,
-    r: CENTER_R,
-    animPhase: 0,
-    seed: 0,
-  })
-
-  const items = entries.map((e, i) => ({
-    label: e.keyword,
-    kind: 'keyword' as const,
-    seed: i * 100 + 7,
-    keyword: e.keyword,
-    keywordEntry: e,
-    animPhase: hash(i, 5) * Math.PI * 2,
+  // Spread evenly, offset by -π/2 so first item is at top
+  return raw.map((label, i) => ({
+    id: stage.value === 'keyword' ? `kw-${i}` : `op-${i}`,
+    label,
+    angle: -Math.PI / 2 + (i / count) * Math.PI * 2,
+    radius: r,
   }))
+})
 
-  const positions = placeSatellites(items, CENTER_R)
-
-  items.forEach((item, i) => {
-    nodes.push({
-      kind: 'keyword',
-      label: item.label,
-      x: positions[i].x,
-      y: positions[i].y,
-      r: positions[i].r,
-      animPhase: item.animPhase,
-      seed: item.seed,
-      keyword: item.keyword,
-      keywordEntry: item.keywordEntry,
-    })
-  })
-
-  return nodes
-}
-
-function buildOpinionNodes(entry: EngineOpinionType): CanvasNode[] {
-  const nodes: CanvasNode[] = []
-  nodes.push({
-    kind: 'center',
-    label: entry.keyword,
-    x: 0,
-    y: 0,
-    r: CENTER_R,
-    animPhase: 0,
-    seed: 0,
-  })
-
-  const items = entry.data.map((op, i) => ({
-    label: op.opinion,
-    kind: 'opinion' as const,
-    seed: i * 300 + 13,
-    keyword: entry.keyword,
-    opinionIdx: i,
-    keywordEntry: entry,
-    opinionText: op.opinion,
-    antithesisText: op.antiThesis || 'No antithesis provided',
-    animPhase: hash(i, 16) * Math.PI * 2,
-  }))
-
-  const positions = placeSatellites(items, CENTER_R)
-
-  items.forEach((item, i) => {
-    nodes.push({
-      kind: 'opinion',
-      label: item.label,
-      x: positions[i].x,
-      y: positions[i].y,
-      r: positions[i].r,
-      animPhase: item.animPhase,
-      seed: item.seed,
-      keyword: item.keyword,
-      opinionIdx: item.opinionIdx,
-      keywordEntry: item.keywordEntry,
-      opinionText: item.opinionText,
-      antithesisText: item.antithesisText,
-    })
-  })
-
-  return nodes
-}
-
-// ── Canvas state ──────────────────────────────────────────────────────────────
-
-const DEFAULT_ZOOM = 0.9
-const MIN_ZOOM = 0.15
-const MAX_ZOOM = 5.0
-
-const canvasEl = ref<HTMLCanvasElement | null>(null)
-let W = 0,
-  H = 0
-let zoom = DEFAULT_ZOOM
-let panX = 0,
-  panY = 0
-let dragging = false
-let activePointerId = -1
-let lastMx = 0,
-  lastMy = 0
-let didDrag = false
-let hoveredIdx = -1
-let rafId = 0
-let nodes: CanvasNode[] = []
-let navigating = false
-
-function rebuildNodes() {
-  nodes =
-    viewState.value === 'keywords'
-      ? buildKeywordNodes(categoryKeywords.value)
-      : buildOpinionNodes(activeKeywordEntry.value!)
-  hoveredIdx = -1
-}
-
-function worldToScreen(wx: number, wy: number): [number, number] {
-  return [panX + wx * zoom, panY + wy * zoom]
-}
-function screenToWorld(sx: number, sy: number): [number, number] {
-  return [(sx - panX) / zoom, (sy - panY) / zoom]
-}
-
-function hitTest(mx: number, my: number): number {
-  const [wx, wy] = screenToWorld(mx, my)
-  for (let i = nodes.length - 1; i >= 0; i--) {
-    const n = nodes[i]
-    if (Math.hypot(wx - n.x, wy - n.y) <= n.r) return i
-  }
-  return -1
-}
-
-// ── Drawing ───────────────────────────────────────────────────────────────────
-
-function drawPixelRim(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number,
-  t: number,
-  seed: number,
-) {
-  const pixelSize = Math.max(1.8, 2.6 * zoom)
-  const step = pixelSize + Math.max(1.0, 1.6 * zoom)
-  for (let dy = -r - step; dy <= r + step; dy += step) {
-    for (let dx = -r - step; dx <= r + step; dx += step) {
-      const d = Math.hypot(dx, dy)
-      if (d > r || d / r < 0.65) continue
-      const norm = d / r
-      let alpha = ((norm - 0.65) / 0.35) * 0.65
-      const rand =
-        (((Math.sin(seed * 0.01 + dx * 0.37 + dy * 0.53) * 10000) % 1) - 0.5) *
-        0.06
-      alpha = Math.min(
-        0.7,
-        Math.max(
-          0,
-          alpha + rand + 0.03 * Math.sin(t * 1.2 + dx * 0.12 + dy * 0.12),
-        ),
-      )
-      ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`
-      ctx.fillRect(
-        cx + dx - pixelSize / 2,
-        cy + dy - pixelSize / 2,
-        pixelSize,
-        pixelSize,
-      )
-    }
+function itemStyle(item: DisplayItem) {
+  const x = Math.cos(item.angle) * item.radius
+  const y = Math.sin(item.angle) * item.radius
+  return {
+    left: '50%',
+    top: '50%',
+    transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`,
   }
 }
 
-function wrapText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-): string[] {
-  const words = text.split(' ')
-  const lines: string[] = []
-  let current = ''
-  for (const word of words) {
-    const test = current ? `${current} ${word}` : word
-    if (ctx.measureText(test).width > maxWidth && current) {
-      lines.push(current)
-      current = word
-    } else current = test
-  }
-  if (current) lines.push(current)
-  return lines
+// ── Drag ──────────────────────────────────────────────────────────────────────
+const wrapperEl = ref<HTMLElement | null>(null)
+const draggingId = ref<string | null>(null)
+const dragPos = ref({ x: 0, y: 0 })
+const dragStartPos = ref({ x: 0, y: 0 })
+const dragOver = ref(false)
+
+function getCircleCenter() {
+  if (!wrapperEl.value) return { x: 0, y: 0 }
+  const rect = wrapperEl.value.getBoundingClientRect()
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
 }
 
-function drawNode(
-  ctx: CanvasRenderingContext2D,
-  node: CanvasNode,
-  isHovered: boolean,
-  t: number,
-) {
-  const [sx, sy] = worldToScreen(node.x, node.y)
-  const sr = node.r * zoom
+function isInsideCircle(cx: number, cy: number): boolean {
+  const c = getCircleCenter()
+  const dx = cx - c.x
+  const dy = cy - c.y
+  return Math.sqrt(dx * dx + dy * dy) < CIRCLE_SIZE / 2 - 8
+}
 
-  if (node.kind === 'center') {
-    if (sx + sr < -40 || sx - sr > W + 40 || sy + sr < -40 || sy - sr > H + 40)
-      return
-    drawPixelRim(ctx, sx, sy, sr, t + node.animPhase, node.seed)
-    ctx.save()
-    const fs = Math.max(12, Math.round(16 * zoom))
-    ctx.font = `500 ${fs}px "Gap Sans", monospace`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.shadowColor = 'rgba(0,0,0,0.95)'
-    ctx.shadowBlur = 8
-    ctx.fillStyle = '#ffffff'
-    const lines = wrapText(ctx, node.label.toUpperCase(), sr * 1.2)
-    const lineH = fs * 1.3
-    const totalH = lines.length * lineH
-    lines.forEach((line, li) =>
-      ctx.fillText(line, sx, sy - totalH / 2 + li * lineH + lineH / 2),
-    )
-    ctx.restore()
-    return
-  }
+function onItemPointerDown(e: PointerEvent, id: string) {
+  if (e.button !== 0 && e.pointerType === 'mouse') return
+  e.preventDefault()
+  draggingId.value = id
+  dragPos.value = { x: e.clientX, y: e.clientY }
+  dragStartPos.value = { x: e.clientX, y: e.clientY }
+  dragOver.value = false
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+}
 
-  // Satellite: text only, with a subtle hover bg circle
-  const baseFontSize = node.kind === 'keyword' ? 14 : 13
-  const fs = Math.max(10, Math.round(baseFontSize * zoom))
+function onGlobalPointerMove(e: PointerEvent) {
+  if (!draggingId.value) return
+  dragPos.value = { x: e.clientX, y: e.clientY }
+  dragOver.value = isInsideCircle(e.clientX, e.clientY)
+}
 
-  ctx.save()
-  ctx.font = `400 ${fs}px "Gap Sans", monospace`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.shadowColor = 'rgba(0,0,0,0.95)'
-  ctx.shadowBlur = 8
-  ctx.fillStyle = isHovered ? '#ffffff' : '#c0c0c0'
-
-  const maxW = sr * 2 * 0.9
-  const lines = wrapText(ctx, node.label, maxW)
-  const displayLines = lines.slice(0, MAX_LINES)
-  if (lines.length > MAX_LINES)
-    displayLines[MAX_LINES - 1] = displayLines[MAX_LINES - 1].replace(
-      /\s\S+$/,
-      '…',
-    )
-  const lineH = fs * 1.35
-  const totalH = displayLines.length * lineH
-  displayLines.forEach((line, li) =>
-    ctx.fillText(line, sx, sy - totalH / 2 + li * lineH + lineH / 2),
+function onGlobalPointerUp(e: PointerEvent) {
+  if (!draggingId.value) return
+  const id = draggingId.value
+  const dist = Math.hypot(
+    e.clientX - dragStartPos.value.x,
+    e.clientY - dragStartPos.value.y,
   )
-  ctx.restore()
+  const inside = isInsideCircle(e.clientX, e.clientY)
 
-  if (isHovered) {
-    ctx.save()
-    ctx.beginPath()
-    ctx.arc(sx, sy, sr * 0.85, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(255,255,255,0.06)'
-    ctx.fill()
-    ctx.restore()
+  draggingId.value = null
+  dragOver.value = false
+
+  // Accept as drop if dragged inside OR was a simple tap/click
+  if (inside || dist < 10) {
+    selectItem(id)
   }
 }
 
-function drawConnectors(ctx: CanvasRenderingContext2D) {
-  const [cx, cy] = worldToScreen(0, 0)
-  ctx.save()
-  ctx.strokeStyle = 'rgba(255,255,255,0.1)'
-  ctx.lineWidth = 1
-  ctx.setLineDash([4, 8])
-  for (let i = 1; i < nodes.length; i++) {
-    const [sx, sy] = worldToScreen(nodes[i].x, nodes[i].y)
-    ctx.beginPath()
-    ctx.moveTo(cx, cy)
-    ctx.lineTo(sx, sy)
-    ctx.stroke()
-  }
-  ctx.setLineDash([])
-  ctx.restore()
-}
+// ── Selection ─────────────────────────────────────────────────────────────────
+const navigating = ref(false)
 
-function draw(ts: number) {
-  const canvas = canvasEl.value
-  if (!canvas) return
-  const ctx = canvas.getContext('2d')!
-  const t = ts / 1000
-  ctx.clearRect(0, 0, W, H)
-  ctx.fillStyle = '#0a0a0f'
-  ctx.fillRect(0, 0, W, H)
-  drawConnectors(ctx)
-  for (let i = 0; i < nodes.length; i++)
-    drawNode(ctx, nodes[i], i === hoveredIdx, t)
-  rafId = requestAnimationFrame(draw)
-}
+function selectItem(id: string) {
+  if (navigating.value) return
 
-// ── Zoom / pan ────────────────────────────────────────────────────────────────
-
-function zoomAround(cx: number, cy: number, factor: number) {
-  const wx = (cx - panX) / zoom
-  const wy = (cy - panY) / zoom
-  zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor))
-  panX = cx - wx * zoom
-  panY = cy - wy * zoom
-}
-function resetView() {
-  zoom = DEFAULT_ZOOM
-  panX = W / 2
-  panY = H / 2
-}
-
-// ── Interaction ───────────────────────────────────────────────────────────────
-
-function handleClick(idx: number) {
-  const node = nodes[idx]
-  if (!node) return
-  if (node.kind === 'keyword' && node.keywordEntry) {
-    activeKeywordEntry.value = node.keywordEntry
-    viewState.value = 'opinions'
-    rebuildNodes()
-    resetView()
+  if (stage.value === 'keyword') {
+    const idx = parseInt(id.replace('kw-', ''))
+    const entry = categoryKeywords.value[idx]
+    if (!entry) return
+    selectedKeyword.value = entry
+    stage.value = 'opinion'
     return
   }
-  if (
-    node.kind === 'opinion' &&
-    node.keywordEntry &&
-    node.opinionIdx !== undefined
-  ) {
+
+  if (stage.value === 'opinion' && selectedKeyword.value) {
+    const idx = parseInt(id.replace('op-', ''))
+    const op = selectedKeyword.value.data[idx]
+    if (!op) return
+
     saveSelectionArchive({
       category: category.value,
-      keyword: node.keyword || '',
-      opinion: node.opinionText || '',
-      antithesis: node.antithesisText || '',
+      keyword: selectedKeyword.value.keyword,
+      opinion: op.opinion,
+      antithesis: op.antiThesis || '',
     })
-    navigating = true
+
+    navigating.value = true
     router
       .push({
         name: 'Result',
         query: {
-          opinion: node.opinionText || '',
-          antithesis: node.antithesisText || '',
+          opinion: op.opinion,
+          antithesis: op.antiThesis || '',
           category: category.value,
-          keyword: node.keyword,
+          keyword: selectedKeyword.value.keyword,
         },
       })
       .finally(() => {
-        navigating = false
+        navigating.value = false
       })
   }
 }
 
-function onPointerMove(e: PointerEvent) {
-  if (navigating) return
-  if (dragging && e.pointerId === activePointerId) {
-    panX += e.clientX - lastMx
-    panY += e.clientY - lastMy
-    if (Math.abs(e.clientX - lastMx) > 6 || Math.abs(e.clientY - lastMy) > 6)
-      didDrag = true
-    lastMx = e.clientX
-    lastMy = e.clientY
-    hoveredIdx = -1
-    if (canvasEl.value) canvasEl.value.style.cursor = 'grabbing'
-    return
-  }
-
-  if (e.pointerType !== 'mouse') return
-
-  hoveredIdx = hitTest(e.clientX, e.clientY)
-  const n = nodes[hoveredIdx]
-  if (canvasEl.value)
-    canvasEl.value.style.cursor =
-      hoveredIdx >= 0 && n?.kind !== 'center' ? 'pointer' : 'grab'
-}
-
-function onPointerDown(e: PointerEvent) {
-  if (navigating) return
-  if (e.pointerType === 'mouse' && e.button !== 0) return
-  dragging = true
-  didDrag = false
-  activePointerId = e.pointerId
-  lastMx = e.clientX
-  lastMy = e.clientY
-  hoveredIdx = -1
-  const canvas = canvasEl.value
-  if (canvas) {
-    canvas.setPointerCapture(e.pointerId)
-    canvas.style.cursor = 'grabbing'
+function goBack() {
+  if (stage.value === 'opinion') {
+    stage.value = 'keyword'
+    selectedKeyword.value = null
   }
 }
 
-function onPointerUp(e: PointerEvent) {
-  if (e.pointerId !== activePointerId) return
-  if (navigating) {
-    dragging = false
-    activePointerId = -1
-    if (canvasEl.value) canvasEl.value.style.cursor = 'grab'
-    return
-  }
-  if (!didDrag) {
-    const idx = hitTest(e.clientX, e.clientY)
-    if (idx >= 0) handleClick(idx)
-  }
-  dragging = false
-  activePointerId = -1
-  if (canvasEl.value) canvasEl.value.style.cursor = 'grab'
-}
-
-function onPointerCancel(e: PointerEvent) {
-  if (e.pointerId !== activePointerId) return
-  dragging = false
-  activePointerId = -1
-  if (canvasEl.value) canvasEl.value.style.cursor = 'grab'
-}
-
-function onWheel(e: WheelEvent) {
-  if (navigating) return
-  e.preventDefault()
-  zoomAround(e.clientX, e.clientY, e.deltaY < 0 ? 1.07 : 0.93)
-}
-
-function onResize() {
-  const canvas = canvasEl.value
-  if (!canvas) return
-  W = canvas.width = window.innerWidth
-  H = canvas.height = window.innerHeight
-}
-
-onMounted(() => {
-  const canvas = canvasEl.value!
-  W = canvas.width = window.innerWidth
-  H = canvas.height = window.innerHeight
-  rebuildNodes()
-  resetView()
-  canvas.style.touchAction = 'none'
-  canvas.addEventListener('pointermove', onPointerMove)
-  canvas.addEventListener('pointerdown', onPointerDown)
-  canvas.addEventListener('pointerup', onPointerUp)
-  canvas.addEventListener('pointercancel', onPointerCancel)
-  canvas.addEventListener('wheel', onWheel, { passive: false })
-  window.addEventListener('resize', onResize)
-  rafId = requestAnimationFrame(draw)
+// ── Ghost label ───────────────────────────────────────────────────────────────
+const ghostLabel = computed(() => {
+  if (!draggingId.value) return ''
+  return displayItems.value.find((i) => i.id === draggingId.value)?.label ?? ''
 })
 
+const ghostStyle = computed(() => ({
+  left: `${dragPos.value.x}px`,
+  top: `${dragPos.value.y}px`,
+}))
+
+onMounted(() => {
+  window.addEventListener('pointermove', onGlobalPointerMove)
+  window.addEventListener('pointerup', onGlobalPointerUp)
+})
 onUnmounted(() => {
-  cancelAnimationFrame(rafId)
-  const canvas = canvasEl.value
-  if (canvas) {
-    canvas.removeEventListener('pointermove', onPointerMove)
-    canvas.removeEventListener('pointerdown', onPointerDown)
-    canvas.removeEventListener('pointerup', onPointerUp)
-    canvas.removeEventListener('pointercancel', onPointerCancel)
-    canvas.removeEventListener('wheel', onWheel)
-  }
-  window.removeEventListener('resize', onResize)
+  window.removeEventListener('pointermove', onGlobalPointerMove)
+  window.removeEventListener('pointerup', onGlobalPointerUp)
 })
 </script>
 
 <template>
   <div class="page-root">
-    <p class="breadcrumb plusafter">
+    <!-- Breadcrumb -->
+    <p class="breadcrumb">
       /{{
-        viewState === 'opinions' && activeKeywordEntry
-          ? `${category}/${activeKeywordEntry.keyword}`
+        stage === 'opinion' && selectedKeyword
+          ? `${category}/${selectedKeyword.keyword}`
           : category
       }}
     </p>
-    <canvas ref="canvasEl" class="scene-canvas" />
-    <div class="zoom-hud" @pointerdown.stop @pointerup.stop @click.stop>
-      <button
-        @pointerdown.stop
-        @pointerup.stop
-        @click.stop="zoomAround(W / 2, H / 2, 0.85)"
-      >
-        −
-      </button>
-      <button @pointerdown.stop @pointerup.stop @click.stop="resetView()">
-        ⊙
-      </button>
-      <button
-        @pointerdown.stop
-        @pointerup.stop
-        @click.stop="zoomAround(W / 2, H / 2, 1.18)"
-      >
-        +
-      </button>
+
+    <!-- Back -->
+    <button v-if="stage === 'opinion'" class="back-btn" @click="goBack">
+      ← back
+    </button>
+
+    <!-- Scene -->
+    <div class="scene" ref="wrapperEl">
+      <!-- Sand circle center -->
+      <div class="circle-wrap" :class="{ 'drop-active': dragOver }">
+        <SandCircle
+          :size="CIRCLE_SIZE"
+          :lines="sentenceLines"
+          color="#ffffff"
+          :particleCount="50000"
+        />
+        <div class="circle-ring" :class="{ 'ring-active': dragOver }" />
+      </div>
+
+      <!-- Text items orbiting the circle -->
+      <TransitionGroup name="orbit" tag="div" class="orbit-layer">
+        <div
+          v-for="item in displayItems"
+          :key="item.id"
+          class="orbit-item"
+          :class="{ 'is-dragging': draggingId === item.id }"
+          :style="itemStyle(item)"
+          @pointerdown="onItemPointerDown($event, item.id)"
+        >
+          {{ item.label }}
+        </div>
+      </TransitionGroup>
     </div>
-    <p class="hint" v-if="viewState === 'keywords'">
-      click a keyword to explore opinions
+
+    <!-- Hint -->
+    <p class="hint">
+      {{
+        stage === 'keyword'
+          ? 'drag or click a topic into the circle'
+          : 'drag or click an opinion into the circle'
+      }}
     </p>
-    <p class="hint" v-else>click an opinion to see the full argument</p>
+
+    <!-- Drag ghost -->
+    <Teleport to="body">
+      <div v-if="draggingId" class="drag-ghost" :style="ghostStyle">
+        {{ ghostLabel }}
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
+/* ── Root ── */
 .page-root {
   position: fixed;
   inset: 0;
   overflow: hidden;
   background: #0a0a0f;
+  color: #ffffff;
+  font-family: 'Gap Sans', monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
-.scene-canvas {
-  display: block;
-  cursor: grab;
-  user-select: none;
-  touch-action: none;
-}
-.scene-canvas:active {
-  cursor: grabbing;
-}
+
+/* ── Breadcrumb ── */
 .breadcrumb {
   position: absolute;
   top: 110px;
   left: 24px;
-  z-index: 10;
-  color: white;
-  font-size: 14px;
-  font-family: monospace;
-  opacity: 0.7;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  opacity: 0.35;
   pointer-events: none;
 }
-
 @media (max-width: 500px) {
   .breadcrumb {
     top: 64px;
   }
 }
-.zoom-hud {
+
+/* ── Back ── */
+.back-btn {
   position: absolute;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 14px;
-  z-index: 10;
-}
-.zoom-hud button {
-  width: 46px;
-  height: 46px;
-  background: rgba(20, 20, 30, 0.7);
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  color: white;
-  border-radius: 50%;
-  font-size: 22px;
-  font-weight: bold;
+  top: 110px;
+  right: 24px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 12px;
+  font-family: inherit;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: background 0.2s;
+  padding: 4px 8px;
+  transition: color 0.2s;
 }
-.zoom-hud button:hover {
-  background: rgba(255, 255, 255, 0.18);
+.back-btn:hover {
+  color: rgba(255, 255, 255, 0.85);
 }
+@media (max-width: 500px) {
+  .back-btn {
+    top: 64px;
+  }
+}
+
+/* ── Hint ── */
 .hint {
   position: absolute;
-  bottom: 86px;
+  bottom: 36px;
   left: 50%;
   transform: translateX(-50%);
-  color: rgba(255, 255, 255, 0.28);
-  font-size: 12px;
-  font-family: monospace;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.18);
   white-space: nowrap;
   pointer-events: none;
+}
+
+/* ── Scene container — fixed square, centered ── */
+.scene {
+  position: relative;
+  width: min(90vw, 680px);
+  height: min(90vw, 680px);
+  max-height: 80vh;
+}
+
+/* ── Circle ── */
+.circle-wrap {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  border-radius: 50%;
+  transition: filter 0.3s;
+}
+.circle-wrap.drop-active {
+  filter: brightness(1.2);
+}
+
+.circle-ring {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  pointer-events: none;
+  transition:
+    border-color 0.25s,
+    box-shadow 0.25s;
+}
+.circle-ring.ring-active {
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 40px rgba(255, 255, 255, 0.07);
+}
+
+/* ── Orbit layer ── */
+.orbit-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ── Individual orbit item ── */
+.orbit-item {
+  position: absolute;
+  pointer-events: all;
+  cursor: grab;
+
+  font-size: clamp(10px, 1.4vmin, 13px);
+  font-weight: 300;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.45;
+  text-align: center;
+
+  /* constrain width so long opinions wrap to 3–4 lines */
+  width: 120px;
+
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+
+  transition:
+    color 0.2s,
+    opacity 0.2s,
+    transform 0.18s;
+}
+
+.orbit-item:hover {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.orbit-item.is-dragging {
+  opacity: 0.15;
+  cursor: grabbing;
+}
+
+/* ── Orbit transition ── */
+.orbit-enter-active,
+.orbit-leave-active {
+  transition:
+    opacity 0.3s,
+    transform 0.3s;
+}
+.orbit-enter-from {
+  opacity: 0;
+  transform: translate(calc(-50% + var(--ox, 0px)), calc(-50% + var(--oy, 0px)))
+    scale(0.8) !important;
+}
+.orbit-leave-to {
+  opacity: 0;
+  transform: translate(calc(-50% + var(--ox, 0px)), calc(-50% + var(--oy, 0px)))
+    scale(0.8) !important;
+}
+
+/* ── Drag ghost ── */
+:global(.drag-ghost) {
+  position: fixed;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+
+  font-family: 'Gap Sans', monospace;
+  font-size: 12px;
+  font-weight: 300;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(10, 10, 15, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  padding: 6px 12px;
+  max-width: 160px;
+  text-align: center;
+  line-height: 1.4;
+  backdrop-filter: blur(6px);
 }
 </style>

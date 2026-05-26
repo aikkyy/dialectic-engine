@@ -6,9 +6,7 @@
     Scroll to select a topic
   </p>
 
-  <div class="w-full h-screen">
-    <CategoryScatter />
-  </div>
+  <CategoryScatter />
 </template>
 
 <script setup lang="ts">

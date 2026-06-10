@@ -12,7 +12,8 @@
  * Setup (one-time, in the Cloudflare dashboard):
  *   Pages project → Settings → Variables and Secrets → add (encrypted)
  *     ANTHROPIC_API_KEY = <your key>
- *   Optional: ANTHROPIC_MODEL = claude-opus-4-8   (max quality, higher cost)
+ *   Optional: ANTHROPIC_MODEL = claude-sonnet-4-6 (more depth) or
+ *             claude-opus-4-8 (max quality) — both slower than the Haiku default
  *   Then redeploy so the function picks up the value.
  */
 
@@ -82,10 +83,12 @@ export async function onRequestPost(context) {
     })
   }
 
-  // Default to Sonnet — excellent for a 1-3 sentence antithesis and far cheaper
-  // than Opus, so a fixed credit balance lasts the whole exhibition. Override
-  // with ANTHROPIC_MODEL=claude-opus-4-8 for maximum quality.
-  const model = env.ANTHROPIC_MODEL || 'claude-sonnet-4-6'
+  // Default to Haiku — the fastest "thinking" for the snappiest exhibition UX,
+  // and still strong for a 1-3 sentence counter-argument (and cheapest, so a
+  // fixed credit balance lasts longest). Override with
+  // ANTHROPIC_MODEL=claude-sonnet-4-6 (more depth) or claude-opus-4-8 (max
+  // quality) to trade speed for depth.
+  const model = env.ANTHROPIC_MODEL || 'claude-haiku-4-5'
 
   let topic = ''
   let thesis = ''

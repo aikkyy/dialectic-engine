@@ -135,17 +135,14 @@ const currentSuggestion = computed<string>(() => {
  *  the input shows the populated text, the cycling suggestions are
  *  hidden, and nothing else can change. */
 const isSelecting = ref(false)
-/** How long the populated-input state holds before the antithesis flow
- *  kicks in — long enough for the user to register the commit. */
-const SELECTION_PAUSE_MS = 1200
 
-/** User clicked the currently-shown suggestion. Drop its text into the
- *  input (just the "<subtopic> <opinion>" portion that follows "I believe
- *  that" in the prompt), then pause for ~1.2s so the user sees their
- *  selected thesis sitting in the input before the antithesis kicks in.
- *  Server-side DB match short-circuits the LLM and returns the
- *  pre-canned antithesis. */
-async function selectSuggestion() {
+/** User clicked the currently-shown suggestion. Drop its text into the input
+ *  (just the "<subtopic> <opinion>" portion that follows "I believe that" in
+ *  the prompt) and submit immediately, so the "thinking…" state appears right
+ *  away with no delay. `isSelecting` stays true through the submit — the stage
+ *  flips to 'thinking' inside submitThesis(), which hides the suggestion area
+ *  via the v-if on stage. restartOpinion() resets it if the user starts over. */
+function selectSuggestion() {
   if (isSelecting.value || stage.value !== 'input') return
   const order = suggestionOrder.value
   if (!order.length) return
@@ -154,11 +151,6 @@ async function selectSuggestion() {
   userThesis.value = `${flat.keyword} ${flat.opinion}`
   isSelecting.value = true
   stopSuggestionLoop()
-  await new Promise((r) => setTimeout(r, SELECTION_PAUSE_MS))
-  // `isSelecting` is left true through the submit — stage will flip to
-  // 'thinking' inside submitThesis(), which itself hides the suggestion
-  // area via the v-if on stage. restartOpinion() resets isSelecting if
-  // the user starts over.
   void submitThesis()
 }
 
@@ -664,11 +656,16 @@ onUnmounted(() => {
        neither affects layout nor forms a stacking context). A single root
        avoids the Vue fragment-root + <Teleport> unmount bug that left the
        teleported sub-instruction stranded in the DOM after leaving the
-       page. The restart button still sits as a sibling of .dialectic-form
-       (not a child), so it escapes that fixed element's stacking context. -->
+       page. The text content (.form-center, .form-suggestions) and the
+       restart button all sit as siblings of .dialectic-form (not children),
+       so they escape that fixed element's stacking context and render ABOVE
+       the canvas-overlay — otherwise the overlay greys them out (worst at the
+       bottom, where it's darkest). -->
+
   <div class="category-root">
     <div class="dialectic-form">
       <canvas ref="canvasEl" class="form-canvas" aria-hidden="true"></canvas>
+    </div>
 
     <!-- Centre block: "I believe that <topic> <input>" while typing, or
          the antithesis once submitted. The :key on the inner element
@@ -716,19 +713,11 @@ onUnmounted(() => {
       </p>
     </div>
 
-    <!-- Cycling thesis suggestions, only while writing. Italic + low
-         opacity so it reads as "inspiration", not a primary element.
-         Clicking a suggestion drops its text into the input and submits
-         immediately — the same as the user typing it verbatim, which
-         hits the strict DB-match path on the server and returns the
-         pre-canned antithesis without an LLM call.
-         The :key on the inner button drives the crossfade via CSS
-         keyframe — Vue's <Transition> is unreliable under the canvas's
-         rAF load. -->
-    <!-- Hide the suggestions during the brief "you chose this" pause so
-         the populated input stands alone — nothing else moving on screen
-         while the user registers their pick. They reappear if the user
-         restarts. -->
+    <!-- Cycling thesis suggestions, only while writing. Italic so it reads
+         as "inspiration". Clicking one drops its text into the input and
+         submits immediately, exactly as if the user typed it verbatim.
+         The :key on the inner button drives the crossfade via CSS keyframe
+         — Vue's <Transition> is unreliable under the canvas's rAF load. -->
     <div v-if="stage === 'input' && !isSelecting" class="form-suggestions">
       <button
         type="button"
@@ -740,8 +729,6 @@ onUnmounted(() => {
         <span class="text-backing">{{ currentSuggestion }}</span>
       </button>
     </div>
-
-  </div>
 
   <!-- Restart icon — wipe input and morph the pattern. Visible at every
        stage so the user can always start over.
@@ -1004,13 +991,11 @@ onUnmounted(() => {
 /* Generous hold so a full thesis sentence is on screen long enough for
    the user to read, consider, and possibly copy. Fades are brief at the
    edges (~700 ms each) so most of the cycle is the readable steady state.
-   Peak opacity 0.85 — reads as a light grey-white against the canvas
-   (paired with the --text-halo backdrop above) while still feeling
-   secondary to the primary input prompt. */
+   Peak opacity 1 — full white (paired with the --text-halo backdrop above). */
 @keyframes suggestion-cycle {
   0%   { opacity: 0; transform: translateY(8px); }
-  8%   { opacity: 0.85; transform: translateY(0); }
-  92%  { opacity: 0.85; transform: translateY(0); }
+  8%   { opacity: 1; transform: translateY(0); }
+  92%  { opacity: 1; transform: translateY(0); }
   100% { opacity: 0; transform: translateY(-8px); }
 }
 

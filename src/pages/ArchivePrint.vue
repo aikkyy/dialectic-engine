@@ -17,7 +17,8 @@ import LZString from 'lz-string'
 import html2canvas from 'html2canvas'
 import { usePageLayout } from '../composables/usePageLayout'
 
-usePageLayout({ instructions: 'long-press the image to save' })
+// No chrome instruction on the print page — just the title + download icon.
+usePageLayout({ instructions: '' })
 
 interface Record {
   category: string
@@ -78,7 +79,7 @@ function download() {
   if (!jpgUrl.value) return
   const a = document.createElement('a')
   a.href = jpgUrl.value
-  a.download = 'dialectic-archive.jpg'
+  a.download = 'dialectic-engine-archive.jpg'
   document.body.appendChild(a)
   a.click()
   a.remove()
@@ -87,7 +88,7 @@ function download() {
 onMounted(async () => {
   const data = readPayload()
   if (!data || data.length === 0) {
-    error.value = 'No archive data in this link.'
+    error.value = 'no archive data available yet'
     generating.value = false
     return
   }
@@ -100,8 +101,6 @@ onMounted(async () => {
 <template>
   <div class="print-page">
     <p v-if="error" class="print-error">{{ error }}</p>
-
-    <p v-if="generating && !error" class="print-status">generating…</p>
 
     <!-- The hidden source for html2canvas. Rendered off-screen until image is
          ready so the user sees the JPG, not the HTML version. -->
@@ -133,8 +132,27 @@ onMounted(async () => {
 
     <div v-if="jpgUrl" class="print-result">
       <img :src="jpgUrl" alt="Your archive" class="print-img" />
-      <button class="btn print-download" type="button" @click="download">
-        Download
+      <button
+        class="print-download-btn"
+        type="button"
+        aria-label="Download your thesis and antithesis"
+        @click="download"
+      >
+        <!-- Family download icon (square tray + chevron). stroke-width 0.7 at
+             36px renders ~1px, matching the plus glyph on this page. -->
+        <svg
+          viewBox="0 0 24 24"
+          width="36"
+          height="36"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="0.7"
+          aria-hidden="true"
+        >
+          <path d="M21 15v6H3v-6" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
       </button>
     </div>
   </div>
@@ -152,8 +170,7 @@ onMounted(async () => {
   padding: 0 var(--edge-x);
 }
 
-.print-error,
-.print-status {
+.print-error {
   text-align: center;
   font-family: 'Reddit Mono', monospace;
   font-size: var(--fs-small);
@@ -231,7 +248,21 @@ onMounted(async () => {
   border: 1px solid var(--border);
   display: block;
 }
-.print-download {
-  /* Use the global .btn look. */
+.print-download-btn {
+  /* Icon-only download button. Generous padding gives a comfortable tap target
+     on a phone around the 36px icon. */
+  background: none;
+  border: 0;
+  padding: 0.5rem;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  filter: var(--icon-halo);
+  transition: color 0.18s ease;
+}
+.print-download-btn:hover {
+  color: var(--accent);
 }
 </style>

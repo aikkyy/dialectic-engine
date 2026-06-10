@@ -1,19 +1,18 @@
 /**
  * antithesisHandler.ts — server-side handler for the antithesis generator
  *
- * Flow:
- *   Every thesis is sent to the configured provider to generate a fresh,
- *   structured antithesis (no dataset short-circuit — even a verbatim copy of a
- *   suggested thesis gets a newly written reply):
- *        • 'ollama' — a local, offline, free open-source model (default).
- *          Uses Ollama's JSON-schema `format` to constrain the reply to
- *          {kind, text}, primed with few-shot examples from our own dataset.
- *        • 'claude' — Anthropic's cloud API, kept as a fallback. Uses tool-use
- *          to force one of two structured shapes.
+ * Flow — every thesis goes to the model (no dataset short-circuit), tried in
+ * order with a seamless automatic fallback:
+ *        1. Ollama — a local, offline, free open-source model (PRIMARY). Uses
+ *           Ollama's JSON-schema `format` to constrain the reply to {kind,
+ *           text}, primed with few-shot examples from our own dataset.
+ *        2. Claude — Anthropic's cloud API. Tried automatically ONLY when
+ *           Ollama fails (down / timed out / unreadable) AND a key is set.
+ *           Uses tool-use to force one of the two structured shapes.
  *
- * Either way the model must return EITHER a genuine antithesis OR a warning
- * (gibberish / off-topic). The provider is chosen by config, not hard-coded,
- * so the same handler runs offline at an exhibition (Ollama) or in the cloud.
+ * A "warning" (gibberish / off-topic) is a real answer, not a failure, so it
+ * is returned as-is and never triggers the fallback (no wasted paid call).
+ * With no API key the engine stays fully offline — no fallback, no cost.
  *
  * Designed to be portable: this handler is pure (no Express/Vite/fastify
  * coupling) — the caller passes config in rather than reading process.env —
@@ -45,12 +44,12 @@ export interface OllamaConfig {
 }
 
 export interface AntithesisConfig {
-  /** Which backend generates the antithesis. */
-  provider: 'ollama' | 'claude'
-  /** Only used when provider === 'claude'. */
-  anthropicApiKey?: string
-  /** Only used when provider === 'ollama'. */
+  /** Local Ollama model — always tried FIRST (offline, free, fast). */
   ollama?: OllamaConfig
+  /** Anthropic API key — used as an AUTOMATIC cloud fallback when Ollama is
+   *  unavailable. Omit it (no key) to stay fully offline: no fallback, no API
+   *  cost. */
+  anthropicApiKey?: string
 }
 
 // ─── Shared prompt material ──────────────────────────────────────────────────
@@ -203,11 +202,17 @@ async function callOllama(
     { role: 'user', content: formatUserTurn(req.topic, req.thesis) },
   ]
 
+  // Abort a hung request after a generous window so the visitor falls back to
+  // the cloud model instead of waiting forever. 45s comfortably covers a real
+  // (even slow) generation of a 1-3 sentence reply.
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 45_000)
   let res: Response
   try {
     res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         model: cfg.model,
         stream: false,
@@ -218,6 +223,7 @@ async function callOllama(
       }),
     })
   } catch (err) {
+    clearTimeout(timeoutId)
     // eslint-disable-next-line no-console
     console.error('[antithesis] Ollama fetch failed:', err)
     return {
@@ -225,6 +231,7 @@ async function callOllama(
       text: `Could not reach the local AI model at ${cfg.baseUrl}. Make sure Ollama is running (\`ollama serve\`) and the model is pulled (\`ollama pull ${cfg.model}\`).`,
     }
   }
+  clearTimeout(timeoutId)
 
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
@@ -423,18 +430,30 @@ export async function generateAntithesis(
     return { kind: 'error', text: 'Missing topic.' }
   }
 
-  // Hand off to the configured provider. Every thesis is sent to the model —
-  // even a verbatim copy of a suggested one — so the AI always writes a fresh
-  // antithesis rather than returning the dataset's pre-canned one.
-  if (config.provider === 'ollama') {
-    if (!config.ollama) {
-      return {
-        kind: 'error',
-        text: 'Ollama is selected but not configured (missing OLLAMA_URL / OLLAMA_MODEL).',
-      }
-    }
-    return callOllama({ topic, thesis }, config.ollama)
+  // Every thesis goes to the model (no dataset short-circuit), and the local
+  // Ollama model is tried FIRST. A genuine antithesis — OR a legitimate
+  // "warning" (gibberish / off-topic) — is a real answer, returned as-is. Only
+  // a provider FAILURE (Ollama down, timed out, unreadable) falls through to
+  // the cloud fallback, so a warning never wastes a paid Claude call.
+  if (config.ollama) {
+    const local = await callOllama({ topic, thesis }, config.ollama)
+    if (local.kind !== 'error') return local
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[antithesis] Ollama unavailable — falling back to Claude:',
+      local.text,
+    )
   }
 
-  return callClaude({ topic, thesis }, config.anthropicApiKey)
+  // Automatic cloud fallback. Only attempted when a key is configured, so with
+  // no key the engine stays fully offline (no fallback, no surprise cost). The
+  // result shape is identical, so the switch is invisible to the visitor.
+  if (config.anthropicApiKey) {
+    return callClaude({ topic, thesis }, config.anthropicApiKey)
+  }
+
+  return {
+    kind: 'error',
+    text: 'The antithesis service is unavailable. Make sure Ollama is running, or set ANTHROPIC_API_KEY to enable the cloud fallback.',
+  }
 }

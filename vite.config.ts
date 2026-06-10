@@ -84,14 +84,10 @@ export default defineConfig(({ command, mode }) => {
   // .env.local without sticking any of it in the client bundle.
   const env = loadEnv(mode, process.cwd(), '')
 
-  // Default to the local, offline, free Ollama backend; flip AI_PROVIDER to
-  // 'claude' to use the Anthropic cloud API instead.
-  const provider =
-    (env.AI_PROVIDER || 'ollama').toLowerCase() === 'claude'
-      ? 'claude'
-      : 'ollama'
+  // Local Ollama generates the antithesis (offline, free, fast). If it's
+  // unavailable, the handler automatically falls back to Claude — but only when
+  // ANTHROPIC_API_KEY is set, so with no key the engine stays fully offline.
   const aiConfig: AntithesisConfig = {
-    provider,
     anthropicApiKey: env.ANTHROPIC_API_KEY,
     ollama: {
       baseUrl: env.OLLAMA_URL || 'http://localhost:11434',

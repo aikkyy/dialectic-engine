@@ -126,7 +126,9 @@ p {
 
 h1 {
   font-family: 'Gap Sans', sans-serif;
-  font-size: var(--fs-display);
+  /* 10% larger than the base display scale, across the whole clamp range (so
+     it's +10% on every device). */
+  font-size: calc(var(--fs-display) * 1.1);
   line-height: 1;
   /* Slight positive tracking so the title reads as a deliberate display
      element — Gap Sans's natural metrics sit tightly together at this
@@ -732,4 +734,17 @@ a {
   border-width: calc(var(--arrowhead-size) / 2) 0
     calc(var(--arrowhead-size) / 2) var(--arrowhead-size);
   border-color: transparent transparent transparent currentColor;
+}
+
+/* ── Big-device scale-up ────────────────────────────────────────────────────
+   On screens larger than a laptop (e.g. the exhibition iMac / a desktop
+   monitor), render the whole UI 5% bigger so every text element, icon, and
+   input label reads comfortably from a distance. `zoom` scales uniformly, so
+   all proportions and the layout are preserved — and big screens have ample
+   room, so nothing overflows. Phones and laptops (≤1800px) are unaffected.
+   Adjust the breakpoint if the target display sits below 1800px wide. */
+@media (min-width: 1800px) {
+  :root {
+    zoom: 1.05;
+  }
 }

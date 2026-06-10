@@ -21,6 +21,23 @@ const isArchive = computed(() =>
   route.matched.some((record) => record.name === 'Archive'),
 )
 
+// The phone-side print page (opened from the save QR). Its chrome is stripped
+// to just the (unlinked) title + the page's own download button — no nav.
+const isPrint = computed(() =>
+  route.matched.some((record) => record.name === 'ArchivePrint'),
+)
+
+// The experience is an in-person, desktop installation. Mobile devices are
+// blocked from every page EXCEPT the print page (which phones open from the
+// save QR). Detection is user-agent based — covers phones and iPads (incl.
+// iPadOS, which masquerades as "MacIntel" but reports touch points), while a
+// real iMac/desktop (no touch) is never blocked.
+const isMobileDevice =
+  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(
+    navigator.userAgent,
+  ) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+const isBlocked = computed(() => isMobileDevice && !isPrint.value)
+
 const pageInstructions = ref('')
 const pageTopic = ref('')
 
@@ -160,11 +177,26 @@ async function resetExperience() {
 </script>
 
 <template>
-  <main class="h-screen">
+  <!-- Mobile devices get a stop screen on every page except the print page —
+       the experience itself is desktop/installation-only. -->
+  <main v-if="isBlocked" class="mobile-block">
+    <div class="mobile-block-inner">
+      <h1 class="mobile-block-title">Dialectic Engine</h1>
+      <p class="mobile-block-text">
+        this experience lives on the installation — please visit it in person.
+      </p>
+    </div>
+  </main>
+
+  <main v-else class="h-screen">
     <!-- Title block: fixed top-left on every page. Title links home. Topic + instructions are
          filled per page via the provided PageLayoutContext refs. -->
     <div class="home-intro">
-      <router-link :to="{ name: 'Home' }" class="home-title-link">
+      <component
+        :is="isPrint ? 'div' : 'router-link'"
+        v-bind="isPrint ? {} : { to: { name: 'Home' } }"
+        class="home-title-link"
+      >
         <h1 :class="{ 'is-deconstructing': isResetting }">
           <span
             v-for="(c, i) in titleChars"
@@ -179,7 +211,7 @@ async function resetExperience() {
             >{{ c.char === ' ' ? ' ' : c.char }}</span
           >
         </h1>
-      </router-link>
+      </component>
       <!-- Always render the topic slot (even when empty) so the instructions
            block below it sits at a consistent y position across pages. -->
       <p class="home-topic" :aria-hidden="!pageTopic">
@@ -206,7 +238,7 @@ async function resetExperience() {
 
     <Button v-if="isHome" class="corner-tr start-cta" href="./form">Start</Button>
     <button
-      v-if="!isHome"
+      v-if="!isHome && !isPrint"
       class="corner-tr group inline-flex h-6 w-6 items-center justify-center cursor-pointer"
       type="button"
       aria-label="Go back"
@@ -223,10 +255,15 @@ async function resetExperience() {
         <path d="M11 6L5 12l6 6" />
       </svg>
     </button>
-    <Button v-if="!isArchive" class="corner-br" href="./archive">
+    <Button v-if="!isArchive && !isPrint" class="corner-br" href="./archive">
       Archive
     </Button>
-    <button class="btn corner-bl" type="button" @click="resetExperience">
+    <button
+      v-if="!isPrint"
+      class="btn corner-bl"
+      type="button"
+      @click="resetExperience"
+    >
       End experience
     </button>
 
@@ -274,6 +311,31 @@ async function resetExperience() {
 </template>
 
 <style>
+/* ── Mobile block screen ─────────────────────────────────────────────────────
+   Shown on phones/tablets for every route except the print page. */
+.mobile-block {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  padding: 2rem;
+}
+.mobile-block-inner {
+  max-width: 34ch;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.mobile-block-text {
+  font-family: 'Reddit Mono', monospace;
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  color: var(--text);
+  opacity: 0.72;
+}
+
 /* CSS-only page transition. The :key on the wrapper changes per route, so a
    new wrapper element mounts each time and this keyframe runs on it.
    Opacity ONLY — a `transform` (even `translateY(0)`) on this wrapper would

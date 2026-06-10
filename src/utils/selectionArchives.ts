@@ -72,3 +72,8 @@ export function saveSelectionArchive(params: {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(archives))
   return archives
 }
+
+export function clearSelectionArchives(): void {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem(STORAGE_KEY)
+}

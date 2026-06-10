@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code working directory
+.claude/
+
+# Rendered pattern artifacts at repo root (output of scripts/render-pattern-animation.mjs).
+# The copies actually served by the app live in public/.
+/pattern-animation-loop.*
+/pattern-still-*.png

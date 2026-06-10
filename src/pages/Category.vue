@@ -237,11 +237,16 @@ async function submitThesis() {
   stage.value = 'thinking'
 
   let result: AntithesisResponse
+  // Abort a hung request after 30s (well beyond a cold start + model call) so a
+  // stalled network can never strand the user on "thinking…".
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 30_000)
   try {
     const response = await fetch('/api/antithesis', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic: category.value, thesis: text }),
+      signal: controller.signal,
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     result = (await response.json()) as AntithesisResponse
@@ -252,26 +257,37 @@ async function submitThesis() {
       'Could not reach the antithesis service. Check your connection and try again.'
     stage.value = 'warning'
     return
+  } finally {
+    clearTimeout(timeoutId)
   }
 
   if (result.kind === 'antithesis') {
+    // Reveal the antithesis FIRST — leave "thinking…" and start the type-out
+    // before any non-essential side-effect, so nothing below can strand the
+    // user on "thinking" if it throws.
     antithesis.value = result.text
-    // The user wrote the whole thesis after "I believe that" — save the
-    // full text as the opinion and leave `keyword` empty. Archive.vue
-    // handles both empty (new freeform) and populated (legacy drag-drop)
-    // keyword shapes so both render cleanly side by side.
-    saveSelectionArchive({
-      category: category.value,
-      keyword: '',
-      opinion: text,
-      antithesis: result.text,
-    })
-    // Morph the canvas to a different mode so the visual signals a shift.
-    const next = pickRandomMode(currentModeIdx)
-    morphToMode(next.mode, next.idx)
     stage.value = 'antithesis'
-    // Reveal the counter-argument one character at a time.
     typeOut(result.text)
+    // Persist to the local archive + morph the canvas. Isolated in try/catch:
+    // a blocked or full localStorage (e.g. a locked-down kiosk browser) or a
+    // canvas hiccup must never break the reveal.
+    try {
+      // The user wrote the whole thesis after "I believe that" — save the full
+      // text as the opinion and leave `keyword` empty. Archive.vue handles both
+      // empty (new freeform) and populated (legacy drag-drop) keyword shapes.
+      saveSelectionArchive({
+        category: category.value,
+        keyword: '',
+        opinion: text,
+        antithesis: result.text,
+      })
+      // Morph the canvas to a different mode so the visual signals a shift.
+      const next = pickRandomMode(currentModeIdx)
+      morphToMode(next.mode, next.idx)
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[antithesis side-effects]', e)
+    }
     return
   }
 

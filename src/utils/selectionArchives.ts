@@ -69,11 +69,22 @@ export function saveSelectionArchive(params: {
     })
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(archives))
+  // Best-effort persistence — localStorage may be unavailable (a locked-down
+  // kiosk browser, private mode) or full; that must never break the antithesis
+  // flow, so swallow the error and return the in-memory list either way.
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(archives))
+  } catch {
+    /* ignore */
+  }
   return archives
 }
 
 export function clearSelectionArchives(): void {
   if (typeof window === 'undefined') return
-  window.localStorage.removeItem(STORAGE_KEY)
+  try {
+    window.localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    /* ignore — see saveSelectionArchive */
+  }
 }

@@ -382,7 +382,14 @@ const RADIAL_R_MAX = 1.6
 const VIS_THRESHOLD = 0.4
 const STEP_SCALE = 8
 const STEP_MIN = 0.18
-const ADDITIVE_GAIN = 180
+// Brighten particles on large displays — see DialecticEngine.vue. Scales only
+// each particle's contribution, never the composited background.
+const ADDITIVE_GAIN =
+  180 *
+  (typeof window !== 'undefined' &&
+  window.matchMedia('(min-width: 1800px)').matches
+    ? 1.3
+    : 1)
 const MAX_RENDER_AREA = 3_000_000
 const TRANSITION_SPEED = 0.035
 

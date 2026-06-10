@@ -18,7 +18,18 @@ const VIS_THRESHOLD = 0.40
 const STEP_SCALE = 8
 const STEP_MIN = 0.18
 const EASE = 0.09
-const ADDITIVE_GAIN = 180
+// Brighten the particles on large displays (e.g. the exhibition iMac) so the
+// figures stay striking. This scales ONLY each particle's brightness
+// contribution — the #181618 background is filled + composited separately and
+// left untouched — so page-to-page uniformity and the .text-backing
+// readability glow are preserved. Evaluated at setup (reload after a
+// cross-breakpoint resize).
+const ADDITIVE_GAIN =
+  180 *
+  (typeof window !== 'undefined' &&
+  window.matchMedia('(min-width: 1800px)').matches
+    ? 1.3
+    : 1)
 // Formula crossfade speed — applied when parity flip switches cos ↔ sin.
 // Uniform temporal blend (not spatial), matches real Chladni global field change.
 const FORMULA_CROSSFADE_SPEED = 0.04

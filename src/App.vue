@@ -255,11 +255,15 @@ async function resetExperience() {
         <path d="M11 6L5 12l6 6" />
       </svg>
     </button>
-    <Button v-if="!isArchive && !isPrint" class="corner-br" href="./archive">
+    <Button
+      v-if="!isArchive && !isPrint && !isHome"
+      class="corner-br"
+      href="./archive"
+    >
       Archive
     </Button>
     <button
-      v-if="!isPrint"
+      v-if="!isPrint && !isHome"
       class="btn corner-bl"
       type="button"
       @click="resetExperience"

@@ -757,6 +757,11 @@ a {
     --fs-small: calc(clamp(0.75rem, 0.8vw, 0.875rem) * 1.1);
     --fs-xs: calc(clamp(0.6875rem, 0.7vw, 0.8125rem) * 1.1);
   }
+  /* The title gets an extra bump on large screens — bigger than the uniform
+     10% the rest of the type gets (its base is var(--fs-display) * 1.1). */
+  h1 {
+    font-size: calc(var(--fs-display) * 1.45);
+  }
   .instr-plus {
     --plus-size: calc(2rem * 1.1);
     --plus-offset: calc(2rem * 1.1);
@@ -774,13 +779,10 @@ a {
   }
 }
 
-/* The Chladni particle patterns read flatter on large, lower-contrast panels
-   (e.g. the exhibition iMac) than on a MacBook. Nudge the canvas contrast +
-   brightness up on big screens so the figures stay striking. The readability
-   overlay is a separate element ABOVE the canvas, so it's unaffected. Tune the
-   two values if the iMac needs more/less punch. */
-@media (min-width: 1800px) {
-  canvas {
-    filter: contrast(1.22) brightness(1.07);
-  }
-}
+/* NOTE: a CSS filter on the canvas (to make patterns "pop" on big screens) was
+   removed — it lifted the canvas background, which broke the match with the
+   .text-backing readability glow (so the glow became visible) and made the
+   canvas pages diverge from the no-canvas pages (scatter / Archive). If the
+   patterns need more punch on large displays, brighten the PARTICLES in the
+   renderer (DialecticEngine / form canvas) instead — that leaves the
+   background untouched, so uniformity and the readability glow stay intact. */

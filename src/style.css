@@ -4,9 +4,11 @@
   font-family: 'Gap Sans';
   font-style: normal;
   font-weight: normal;
-  src:
-    local('Gap Sans'),
-    url('/fonts/GapSans.woff2') format('woff2');
+  /* No local() — always use the bundled webfont so this machine renders
+     exactly like the deployed site. A locally-installed "Gap Sans" (an older,
+     heavier cut) was being picked up by local() and looked far too bold once
+     scaled up to display sizes. */
+  src: url('/fonts/GapSans.woff2') format('woff2');
 }
 
 @font-face {
@@ -15,9 +17,8 @@
   font-family: 'Reddit Mono';
   font-style: normal;
   font-weight: normal;
-  src:
-    local('Reddit Mono'),
-    url('/fonts/RedditMono-Regular.woff2') format('woff2');
+  /* No local() either — bundled webfont only, for the same consistency reason. */
+  src: url('/fonts/RedditMono-Regular.woff2') format('woff2');
 }
 
 /* =========================================================
@@ -61,7 +62,9 @@
   --stack-md: clamp(1.5rem, 3vw, 3rem);
   --stack-lg: clamp(2rem, 4.5vw, 4.5rem);
 
-  /* typography (fluid) — hierarchy: display > tagline > body > small */
+  /* typography (fluid) — hierarchy: display > tagline > body > small.
+     Big-screen (≥1800px) 10% bump is applied via static overrides in the
+     media query at the bottom of this file, not a var() multiplier here. */
   --fs-display: clamp(1.5rem, 3.25vw, 2.75rem);     /* h1 / homepage title (one line) */
   --fs-h2: clamp(1.25rem, 3vw, 1.875rem);
   --fs-tagline: clamp(0.9375rem, 1.4vw, 1.25rem);   /* bottom tagline — bigger than instructions */
@@ -379,18 +382,20 @@ a {
   letter-spacing: 0.06em;
   /* The text itself never changes colour — only the surrounding glow pulses,
      so the CTA calls attention quietly rather than blinking. */
-  animation: glow-pulse 2s ease-in-out infinite;
+  animation: glow-pulse 1.8s ease-in-out infinite;
 }
+/* Gentle amplitude so it breathes smoothly rather than throbbing/"shaking":
+   the blur only travels a small range, and the two shadows move together. */
 @keyframes glow-pulse {
   0%, 100% {
     filter:
-      drop-shadow(0 0 2px rgba(138, 206, 0, 0.4))
-      drop-shadow(0 0 6px rgba(138, 206, 0, 0.22));
+      drop-shadow(0 0 3px rgba(138, 206, 0, 0.45))
+      drop-shadow(0 0 7px rgba(138, 206, 0, 0.3));
   }
   50% {
     filter:
-      drop-shadow(0 0 6px rgba(138, 206, 0, 0.9))
-      drop-shadow(0 0 16px rgba(138, 206, 0, 0.55));
+      drop-shadow(0 0 6px rgba(138, 206, 0, 0.85))
+      drop-shadow(0 0 14px rgba(138, 206, 0, 0.5));
   }
 }
 .btn.start-cta:hover {
@@ -405,7 +410,7 @@ a {
   .btn.start-cta {
     animation: none;
     /* A static glow so the CTA still has presence without motion. */
-    filter: drop-shadow(0 0 5px rgba(138, 206, 0, 0.7));
+    filter: drop-shadow(0 0 7px rgba(138, 206, 0, 0.9));
   }
 }
 
@@ -414,12 +419,12 @@ a {
    App.vue inserts a <span class="instr-glow"> around any *asterisk-marked*
    word in the instruction text. */
 .instr-glow {
-  animation: glow-pulse 2s ease-in-out infinite;
+  animation: glow-pulse 1.8s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
   .instr-glow {
     animation: none;
-    filter: drop-shadow(0 0 4px rgba(138, 206, 0, 0.55));
+    filter: drop-shadow(0 0 6px rgba(138, 206, 0, 0.75));
   }
 }
 
@@ -523,8 +528,8 @@ a {
     transform 0.18s ease;
 }
 .topic-modal-close:hover {
+  /* Spin only — no accent colour (it stays the same dark glyph, just rotates). */
   opacity: 1;
-  color: var(--accent);
   transform: rotate(90deg);
 }
 
@@ -736,15 +741,46 @@ a {
   border-color: transparent transparent transparent currentColor;
 }
 
-/* ── Big-device scale-up ────────────────────────────────────────────────────
-   On screens larger than a laptop (e.g. the exhibition iMac / a desktop
-   monitor), render the whole UI 5% bigger so every text element, icon, and
-   input label reads comfortably from a distance. `zoom` scales uniformly, so
-   all proportions and the layout are preserved — and big screens have ample
-   room, so nothing overflows. Phones and laptops (≤1800px) are unaffected.
-   Adjust the breakpoint if the target display sits below 1800px wide. */
+/* ── Big-device scale-up (≥1800px — e.g. the exhibition iMac) ────────────────
+   Bump every text element and icon 10%, leaving the JS-drawn canvas patterns
+   (<canvas>, sized in JS) at native size. Static per-token overrides — a var()
+   multiplier inside a token's calc() does NOT re-resolve when the var changes,
+   so each token is restated × 1.1 here. The SVG icons scale via a transform,
+   which never fights their hover rotate/nudge (those live on the button or an
+   inner group). Phones/laptops (<1800px) are untouched. */
 @media (min-width: 1800px) {
   :root {
-    zoom: 1.05;
+    --fs-display: calc(clamp(1.5rem, 3.25vw, 2.75rem) * 1.1);
+    --fs-h2: calc(clamp(1.25rem, 3vw, 1.875rem) * 1.1);
+    --fs-tagline: calc(clamp(0.9375rem, 1.4vw, 1.25rem) * 1.1);
+    --fs-body: calc(clamp(0.8125rem, 0.95vw, 1rem) * 1.1);
+    --fs-small: calc(clamp(0.75rem, 0.8vw, 0.875rem) * 1.1);
+    --fs-xs: calc(clamp(0.6875rem, 0.7vw, 0.8125rem) * 1.1);
+  }
+  .instr-plus {
+    --plus-size: calc(2rem * 1.1);
+    --plus-offset: calc(2rem * 1.1);
+  }
+  .smallplus {
+    --plus-size: calc(1rem * 1.1);
+    --plus-offset: calc(1rem * 1.1);
+  }
+  .corner-tr svg,
+  .form-restart-btn svg,
+  .save-archive-btn svg,
+  .topic-modal-close svg {
+    transform: scale(1.1);
+    transform-origin: center;
+  }
+}
+
+/* The Chladni particle patterns read flatter on large, lower-contrast panels
+   (e.g. the exhibition iMac) than on a MacBook. Nudge the canvas contrast +
+   brightness up on big screens so the figures stay striking. The readability
+   overlay is a separate element ABOVE the canvas, so it's unaffected. Tune the
+   two values if the iMac needs more/less punch. */
+@media (min-width: 1800px) {
+  canvas {
+    filter: contrast(1.22) brightness(1.07);
   }
 }
